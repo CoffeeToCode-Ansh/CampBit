@@ -1,0 +1,2076 @@
+/* ==========================================================================
+   STYLESHEET: Login + Site App (Classic palette)
+   --------------------------------------------------------------------------
+   TABLE OF CONTENTS
+    1.  Theme palettes (light / dark design tokens)
+    2.  Base & reset
+    3.  Layout helpers
+    4.  Top bar & navigation
+    5.  Buttons
+    6.  Phone mockup & login screen
+    7.  Landing site (hero, sections, cards, footer)
+    8.  Tabs & pages
+    9.  Dashboard widgets (stats, meters, lists, badges, chips)
+   10.  Profile (key/value grid, avatar)
+   11.  Timetable (timeline, weekly table, next-class banner)
+   12.  Forms & segmented control
+   13.  Menu, bottom sheet & notes
+   14.  Misc (language select, tags, step tracker)
+   15.  Animations (keyframes + where they are used)
+   16.  Motion preferences & print
+   17.  Login extras, notifications & notice dot (restored styles)
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. THEME PALETTES
+   --------------------------------------------------------------------------
+   All colours live in CSS variables so a theme switch only changes tokens.
+   ========================================================================== */
+
+/* ---- Light palette (default) ----
+   Dark Goldenrod #B8860B, Tan #D2B48C, Dust Storm #E5CCC9,
+   White Smoke #F5F5F5, Van Dyke Brown #664228 */
+:root[data-palette="classic"] {
+  /* Page background gradient + soft corner glows */
+  --bg1: #F5F5F5;
+  --bg2: #E5CCC9;
+  --glow-blue: rgba(210, 180, 140, .40);
+  --glow-red: rgba(184, 134, 11, .14);
+
+  /* Text */
+  --text: #664228;
+  --muted: #72523C;
+
+  /* Buttons */
+  --btn1: #946A08;
+  --btn2: #7A5808;
+  --btn-text: #ffffff;
+
+  /* Translucent "glass" surfaces */
+  --ghost: rgba(255, 255, 255, .62);
+  --ghost-border: rgba(210, 180, 140, .75);
+
+  /* Accents & status colours */
+  --blue: #8F6709;
+  --red: #B3382A;
+  --error: #B3382A;
+  --accent: #8F6709;
+  --gold: #B8860B;
+
+  /* Top bar background */
+  --bar: rgba(245, 245, 245, .88);
+
+  /* Phone frame + screen gradient */
+  --frame: rgba(255, 255, 255, .65);
+  --frame-border: #ffffff;
+  --scr1: #F8F6F4;
+  --scr2: #EEDFD8;
+  --scr3: #E5CCC9;
+
+  /* Inputs & dividers */
+  --input: #FFFDFB;
+  --line: rgba(102, 66, 40, .22);
+
+  /* Tints (used for highlights / focus rings) */
+  --t10: rgba(184, 134, 11, .12);
+  --t15: rgba(184, 134, 11, .18);
+  --t50: rgba(184, 134, 11, .45);
+  --t6: rgba(184, 134, 11, .10);
+}
+
+/* ---- Dark palette via OS preference ----
+   NOTE: this block is wrapped in `prefers-color-scheme: light` in the
+   original code. That looks like a typo for `dark`, but it is kept as-is
+   so behaviour does not change. */
+@media (prefers-color-scheme: light) {
+  :root[data-palette="classic"]:not([data-theme="light"]) {
+    --bg1: #07080b;
+    --bg2: #0d1017;
+    --text: #ffffff;
+    --muted: #a9b0bf;
+    --btn1: #3b6cf5;
+    --btn2: #2a54d4;
+    --blue: #6b93ff;
+    --red: #ff5468;
+    --error: #ff6b7d;
+    --bar: rgba(255, 255, 255, .06);
+    --ghost: rgba(255, 255, 255, .06);
+    --ghost-border: rgba(255, 255, 255, .14);
+    --frame: rgba(255, 255, 255, .06);
+    --frame-border: rgba(255, 255, 255, .14);
+    --scr1: #141a2b;
+    --scr2: #0b0e16;
+    --scr3: #07080b;
+    --input: rgba(255, 255, 255, .06);
+    --line: rgba(255, 255, 255, .14);
+    --accent: #ff5468;
+    --gold: #ff5468;
+    --t10: rgba(29, 78, 216, .1);
+    --t15: rgba(29, 78, 216, .15);
+    --t50: rgba(29, 78, 216, .5);
+    --t6: rgba(215, 38, 61, .06);
+  }
+}
+
+/* ---- Dark palette via manual toggle (data-theme="dark") ---- */
+:root[data-palette="classic"][data-theme="dark"] {
+  --bg1: #07080b;
+  --bg2: #0d1017;
+  --text: #ffffff;
+  --muted: #a9b0bf;
+  --btn1: #3b6cf5;
+  --btn2: #2a54d4;
+  --blue: #6b93ff;
+  --red: #ff5468;
+  --error: #ff6b7d;
+  --bar: rgba(255, 255, 255, .06);
+  --ghost: rgba(255, 255, 255, .06);
+  --ghost-border: rgba(255, 255, 255, .14);
+  --frame: rgba(255, 255, 255, .06);
+  --frame-border: rgba(255, 255, 255, .14);
+  --scr1: #141a2b;
+  --scr2: #0b0e16;
+  --scr3: #07080b;
+  --input: rgba(255, 255, 255, .06);
+  --line: rgba(255, 255, 255, .14);
+  --accent: #ff5468;
+  --gold: #ff5468;
+  --t10: rgba(29, 78, 216, .1);
+  --t15: rgba(29, 78, 216, .15);
+  --t50: rgba(29, 78, 216, .5);
+  --t6: rgba(215, 38, 61, .06);
+}
+
+
+/* ==========================================================================
+   2. BASE & RESET
+   ========================================================================== */
+
+/* Keep content clear of phone notches / home bars */
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+  scroll-behavior: smooth;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(600px 400px at 15% 0%, var(--glow-blue), transparent),
+    radial-gradient(500px 400px at 90% 10%, var(--glow-red), transparent),
+    linear-gradient(180deg, var(--bg1), var(--bg2));
+  background-color: var(--bg1);
+  overflow-x: clip; /* prevent sideways scroll from slide animations */
+}
+
+/* Corner glow colours for dark mode (dark is the fallback) */
+:root[data-theme="dark"] body,
+:root:not([data-theme="light"]) body {
+  --glow-blue: rgba(59, 108, 245, .18);
+  --glow-red: rgba(255, 84, 104, .10);
+}
+
+/* Corner glow colours for light mode */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) body {
+    --glow-blue: rgba(210, 180, 140, .40);
+    --glow-red: rgba(184, 134, 11, .14);
+  }
+}
+
+a {
+  color: var(--blue);
+}
+
+/* Visible keyboard focus for accessibility */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+
+/* ==========================================================================
+   3. LAYOUT HELPERS
+   ========================================================================== */
+
+/* Centered content column */
+.wrap {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Force-hide an element (used by JS to switch views) */
+.hidden {
+  display: none !important;
+}
+
+
+/* ==========================================================================
+   4. TOP BAR & NAVIGATION
+   ========================================================================== */
+
+/* Sticky header with a gold underline */
+.bar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bar);
+  backdrop-filter: blur(12px);
+  border-bottom: 2px solid var(--gold);
+}
+
+/* Logo + site name */
+.brand {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* Right-hand nav links */
+nav {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 14px;
+}
+
+nav a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* Header right-side group (theme button, language, etc.) */
+.hr {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Header left-side group */
+.hl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Light/dark toggle button */
+.themebtn {
+  padding: 7px 11px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+
+/* ==========================================================================
+   5. BUTTONS
+   ========================================================================== */
+
+.btn {
+  display: inline-block;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: 12px;
+  color: var(--btn-text, #fff);
+  background: linear-gradient(135deg, var(--btn1), var(--btn2));
+  text-decoration: none;
+}
+
+/* Variant: transparent "glass" button */
+.btn.ghost {
+  background: var(--ghost);
+  color: var(--text);
+  border: 1px solid var(--ghost-border);
+}
+
+/* Variant: small */
+.btn.sm {
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+
+/* ==========================================================================
+   6. PHONE MOCKUP & LOGIN SCREEN
+   ========================================================================== */
+
+/* Outer phone frame */
+.phone {
+  width: 290px;
+  margin: 0 auto;
+  padding: 10px;
+  border-radius: 38px;
+  background: var(--frame);
+  border: 2px solid var(--frame-border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .15);
+}
+
+/* Inner screen */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 460px;
+  padding: 22px 18px 24px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, var(--scr1), var(--scr2), var(--scr3));
+}
+
+/* Fake status bar (time / battery) */
+.status {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.logo {
+  font-size: 34px;
+  text-align: center;
+}
+
+.screen h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 20px;
+}
+
+.screen p {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- Form field with "Show" password toggle ---- */
+.field {
+  position: relative;
+}
+
+.field input {
+  width: 100%;
+  padding: 12px 64px 12px 14px; /* extra right padding for the Show button */
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.show {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 0;
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* "Remember me" / "Forgot password" row */
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.row input {
+  accent-color: var(--blue);
+}
+
+/* Accent-coloured text */
+.red {
+  color: var(--accent);
+}
+
+/* Error message under inputs */
+.err {
+  min-height: 16px;
+  text-align: center;
+  color: var(--error);
+  font-size: 13px;
+}
+
+/* "— or —" divider */
+.or {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.or::before,
+.or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* Success checkmark circle */
+.tick {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 40px auto 8px;
+  border-radius: 50%;
+  font-size: 30px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--btn1), var(--btn2));
+}
+
+/* ---- Login section wrapper ---- */
+#login {
+  padding: 36px 0 60px;
+}
+
+#login .lead {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+#login .lead h1 {
+  font-size: clamp(26px, 5vw, 38px);
+  margin: 0 0 8px;
+}
+
+.lead p {
+  color: var(--muted);
+  margin: 0;
+}
+
+
+/* ==========================================================================
+   7. LANDING SITE (hero, sections, cards, CTA, footer)
+   ========================================================================== */
+
+/* Hero: text on the left, phone on the right */
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  gap: 30px;
+  align-items: center;
+  padding: 60px 0;
+}
+
+.hero h1 {
+  font-size: clamp(34px, 6vw, 56px);
+  line-height: 1.05;
+  margin: 0 0 14px;
+}
+
+.hero p {
+  color: var(--muted);
+  font-size: 18px;
+  margin: 0 0 24px;
+}
+
+/* Row of call-to-action buttons */
+.btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Generic content section */
+section.block {
+  padding: 40px 0;
+}
+
+section.block > .wrap > h2 {
+  font-size: clamp(24px, 4vw, 34px);
+  margin: 0 0 6px;
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
+/* Responsive card grid */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+  backdrop-filter: blur(10px);
+}
+
+.card h3 {
+  margin: 0 0 8px;
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Bottom call-to-action banner */
+.cta {
+  padding: 40px 20px;
+  text-align: center;
+  border-radius: 24px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+}
+
+footer {
+  padding: 30px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Mobile: stack hero, hide long nav links */
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 30px 0;
+  }
+
+  nav a.l {
+    display: none;
+  }
+}
+
+
+/* ==========================================================================
+   8. TABS & PAGES
+   ========================================================================== */
+
+/* Sticky tab strip under the header (scrolls sideways on small screens) */
+.tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 20px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 51px); /* 51px = header height */
+  z-index: 4;
+}
+
+/* Single tab pill */
+.tab {
+  position: relative;
+  z-index: 1; /* sits above the sliding .pill */
+  flex: none;
+  border: 1px solid var(--ghost-border);
+  background: var(--ghost);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* Active tab (background comes from the sliding .pill) */
+.tab.on {
+  background: transparent;
+  border-color: transparent;
+  color: #fff;
+}
+
+/* Sliding highlight that moves behind the active tab */
+.pill {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--btn1), var(--btn2));
+  transition: transform .4s cubic-bezier(.4, 0, .2, 1),
+              width .4s cubic-bezier(.4, 0, .2, 1);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* A page inside the tab area */
+.pg {
+  padding: 26px 0 40px;
+}
+
+.pg h2 {
+  margin: 0 0 4px;
+  font-size: clamp(22px, 4vw, 30px);
+}
+
+/* Page slide direction when switching tabs */
+.pg.from-r {
+  animation: inr .25s ease;
+}
+
+.pg.from-l {
+  animation: inl .25s ease;
+}
+
+/* Hint text under swipeable areas */
+.swipe-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+
+/* ==========================================================================
+   9. DASHBOARD WIDGETS
+   ========================================================================== */
+
+/* Grid of stat tiles */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+/* Clickable stat tile */
+.stat {
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
+}
+
+.stat b {
+  display: block;
+  font-size: 26px;
+  margin: 4px 0;
+}
+
+.stat span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Progress bar */
+.meter {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+}
+
+/* Low value = red bar */
+.meter i.low {
+  background: var(--red);
+}
+
+/* Vertical list of items */
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.item {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+}
+
+.item .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.item p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.item select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+}
+
+/* Small status label */
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+}
+
+.badge.ok {
+  color: #15803d;
+  border-color: #15803d;
+}
+
+.badge.bad {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* Filter chips */
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  cursor: pointer;
+}
+
+.chip.on {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+
+/* Small footnote text */
+.demo {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+
+/* ==========================================================================
+   10. PROFILE (key/value grid + avatar)
+   ========================================================================== */
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.kv div {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+}
+
+.kv small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Circular initial avatar */
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--btn1), var(--gold));
+}
+
+
+/* ==========================================================================
+   11. TIMETABLE
+   ========================================================================== */
+
+/* Card wrapping the timetable */
+.ttcard {
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+}
+
+/* "Next class" banner */
+.next {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--btn1), var(--btn2));
+  color: #fff;
+  font-size: 14px;
+}
+
+/* ---- Daily timeline ---- */
+.tl {
+  display: grid;
+  gap: 0;
+}
+
+/* One row: [time] [dot] [details] */
+.slot {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px 14px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding-bottom: 14px;
+}
+
+/* Vertical connector line between dots */
+.slot::before {
+  content: "";
+  position: absolute;
+  left: 82px;
+  top: 16px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--line);
+}
+
+.slot:last-child::before {
+  display: none;
+}
+
+.slot .tm {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  padding-top: 2px;
+}
+
+.slot .tm small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.slot .dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.slot .info {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--input);
+}
+
+.slot .info b {
+  font-size: 15px;
+}
+
+.slot .info p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* State: currently happening */
+.slot.now .dot {
+  background: var(--blue);
+  box-shadow: 0 0 0 4px var(--glow-blue);
+}
+
+.slot.now .info {
+  border-color: var(--blue);
+}
+
+/* State: already finished */
+.slot.done {
+  opacity: .55;
+}
+
+.slot.done .dot {
+  background: #15803d;
+}
+
+/* State: break (dashed, no fill) */
+.slot.brk .info {
+  border-style: dashed;
+  background: none;
+}
+
+/* State: slot the user has taken/selected */
+.slot .info[data-take] {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--t15);
+}
+
+/* Date badge next to a heading (e.g. "12 / Oct") */
+.hd {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.dt {
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 12px;
+  background: var(--input);
+  border: 1px solid var(--line);
+}
+
+.dt b {
+  display: block;
+  font-size: 20px;
+}
+
+.dt small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ---- Weekly table ---- */
+.wk {
+  overflow-x: auto;
+  margin-top: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.wk table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 640px;
+  font-size: 13px;
+}
+
+.wk th,
+.wk td {
+  border: 1px solid var(--line);
+  padding: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.wk thead th {
+  background: var(--ghost);
+}
+
+/* Sticky time column on the left */
+.wk th.tm {
+  position: sticky;
+  left: 0;
+  text-align: right;
+  white-space: nowrap;
+  background: var(--bg1);
+  font-size: 12px;
+}
+
+.wk th.tm small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* Class cell */
+.wk td.c b {
+  display: block;
+}
+
+.wk td.c small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Lab cell highlight */
+.wk td.lab {
+  background: var(--glow-blue);
+}
+
+/* Highlight today's column */
+.wk td.tdy {
+  box-shadow: inset 0 0 0 999px var(--t6);
+}
+
+.wk thead th.tdy {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Empty cell */
+.emp {
+  color: var(--muted);
+}
+
+
+/* ==========================================================================
+   12. FORMS & SEGMENTED CONTROL
+   ========================================================================== */
+
+/* ---- Generic form ---- */
+.frm label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+
+.frm input,
+.frm select,
+.frm textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+}
+
+.frm textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.frm .err {
+  margin: 8px 0;
+}
+
+/* Two columns side by side */
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ---- Segmented control (role switcher: student / staff / admin) ---- */
+.seg {
+  position: relative;
+  display: flex;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--input);
+  border: 1px solid var(--line);
+}
+
+/* Sliding highlight (one third of the width) */
+.seg::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--btn1), var(--btn2));
+  transition: transform .4s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Move highlight depending on the selected role */
+.seg[data-r="staff"]::before {
+  transform: translateX(100%);
+}
+
+.seg[data-r="admin"]::before {
+  transform: translateX(200%);
+}
+
+.seg button {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 4px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color .3s;
+}
+
+.seg button.on {
+  background: none; /* highlight comes from ::before */
+  color: #fff;
+}
+
+
+/* ==========================================================================
+   13. MENU, BOTTOM SHEET & NOTES
+   ========================================================================== */
+
+/* ---- Dropdown (hamburger) menu ---- */
+.kb {
+  position: relative;
+}
+
+.kbtn {
+  font-size: 18px;
+  font-weight: 700;
+  padding: 5px 12px;
+  line-height: 1.2;
+}
+
+.menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .2);
+  /* hidden state */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(.96);
+  transform-origin: top left;
+  transition: opacity .2s, transform .2s, visibility .2s;
+}
+
+/* Visible state */
+.kb.open .menu {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.menu button:hover {
+  background: var(--ghost);
+}
+
+/* ---- Bottom sheet / modal ---- */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end; /* sheet sticks to the bottom on mobile */
+  justify-content: center;
+}
+
+/* Dark overlay behind the sheet */
+.sback {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .5);
+  animation: fade .25s;
+}
+
+/* The sheet panel itself */
+.spanel {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow: auto;
+  padding: 26px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  border-radius: 24px 24px 0 0;
+  background: var(--bg1);
+  color: var(--text);
+  border: 1px solid var(--line);
+  animation: sup .4s cubic-bezier(.2, .8, .2, 1);
+}
+
+.spanel h2 {
+  padding-right: 40px; /* room for the close button */
+}
+
+.spanel p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.spanel .demo {
+  margin-top: 12px;
+}
+
+/* Close (X) button */
+.sx {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ghost);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Desktop: centre the sheet like a dialog */
+@media (min-width: 700px) {
+  .sheet {
+    align-items: center;
+  }
+
+  .spanel {
+    border-radius: 24px;
+    max-height: 85vh;
+  }
+}
+
+/* ---- Highlighted note box ---- */
+.note {
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--blue);
+  background: var(--t10);
+  font-size: 14px;
+}
+
+/* Collapsible note (accordion) */
+.ntb {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chev {
+  display: inline-block;
+  margin-left: 8px;
+  font-style: normal;
+  color: var(--muted);
+  transition: transform .3s;
+}
+
+.nt.open .chev {
+  transform: rotate(180deg);
+}
+
+/* Smooth height animation using grid rows (0fr -> 1fr) */
+.dd {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .35s ease;
+}
+
+.dd > div {
+  overflow: hidden;
+}
+
+.nt.open .dd {
+  grid-template-rows: 1fr;
+}
+
+/* ---- Social links ---- */
+.socs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.soc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--input);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Disabled / unavailable link */
+.soc.off {
+  opacity: .55;
+  font-weight: 400;
+}
+
+.soc small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+
+/* ==========================================================================
+   14. MISC (language select, tags, step tracker)
+   ========================================================================== */
+
+/* Language dropdown */
+.langsel {
+  max-width: 92px;
+  padding: 7px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--ghost-border);
+  background: var(--ghost);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* Small pill tag */
+.tag {
+  display: inline-block;
+  margin: 8px 6px 0 0;
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--input);
+  font-size: 12px;
+}
+
+/* Step tracker (dots joined by a line) */
+.steps {
+  display: flex;
+  margin-top: 14px;
+}
+
+.stp {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stp i {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+/* Connector line to the previous step */
+.stp::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+}
+
+.stp:first-child::before {
+  display: none;
+}
+
+/* Completed step turns green */
+.stp.done {
+  color: var(--text);
+}
+
+.stp.done i,
+.stp.done::before {
+  background: #15803d;
+}
+
+
+/* ==========================================================================
+   15. ANIMATIONS
+   ========================================================================== */
+
+/* ---- Keyframes ---- */
+@keyframes rise   { from { opacity: 0; transform: translateY(14px); } }
+@keyframes drop   { from { opacity: 0; transform: translateY(-100%); } }
+@keyframes fade   { from { opacity: 0; } }
+@keyframes popin  { from { opacity: 0; transform: scale(.6); } }
+@keyframes shake  { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes grow   { from { transform: scaleX(0); } }
+@keyframes pulse  { 0% { box-shadow: 0 0 0 0 var(--t50); } 100% { box-shadow: 0 0 0 10px transparent; } }
+@keyframes slr    { from { opacity: 0; transform: translateX(44px); } }
+@keyframes sll    { from { opacity: 0; transform: translateX(-44px); } }
+@keyframes inr    { from { opacity: 0; transform: translateX(40px); } }
+@keyframes inl    { from { opacity: 0; transform: translateX(-40px); } }
+@keyframes sup    { from { transform: translateY(100%); } }
+@keyframes outl   { to   { opacity: 0; transform: translateX(-60px); } }
+@keyframes inr2   { from { opacity: 0; transform: translateX(60px); } }
+@keyframes inl2   { from { opacity: 0; transform: translateX(-60px); } }
+
+/* ---- Login view entrance ---- */
+#loginView:not(.hidden) .bar {
+  animation: drop .5s cubic-bezier(.2, .8, .2, 1);
+}
+
+#loginView .lead {
+  animation: rise .6s .1s both;
+}
+
+#loginView .phone {
+  animation: rise .7s .2s both;
+}
+
+/* ---- Site view entrance (after login) ---- */
+#siteView.enter .bar {
+  animation: drop .55s cubic-bezier(.2, .8, .2, 1);
+}
+
+#siteView.enter .tabs {
+  animation: drop .6s .08s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+#siteView.enter .tab {
+  animation: popin .4s both;
+}
+
+/* Stagger each tab by 0.05s (supports up to 9 tabs) */
+#siteView.enter .tab:nth-child(1) { animation-delay: 0.20s; }
+#siteView.enter .tab:nth-child(2) { animation-delay: 0.25s; }
+#siteView.enter .tab:nth-child(3) { animation-delay: 0.30s; }
+#siteView.enter .tab:nth-child(4) { animation-delay: 0.35s; }
+#siteView.enter .tab:nth-child(5) { animation-delay: 0.40s; }
+#siteView.enter .tab:nth-child(6) { animation-delay: 0.45s; }
+#siteView.enter .tab:nth-child(7) { animation-delay: 0.50s; }
+#siteView.enter .tab:nth-child(8) { animation-delay: 0.55s; }
+#siteView.enter .tab:nth-child(9) { animation-delay: 0.60s; }
+
+/* ---- Cascading page content (.cas = "cascade") ---- */
+.pg.cas > *:not(.list):not(.grid),
+.pg.cas .list > *,
+.pg.cas .grid > * {
+  animation: rise .45s both;
+}
+
+/* Stagger direct children of the page (first 6) */
+.pg.cas > *:not(.list):not(.grid):nth-child(1) { animation-delay: 0.00s; }
+.pg.cas > *:not(.list):not(.grid):nth-child(2) { animation-delay: 0.05s; }
+.pg.cas > *:not(.list):not(.grid):nth-child(3) { animation-delay: 0.10s; }
+.pg.cas > *:not(.list):not(.grid):nth-child(4) { animation-delay: 0.15s; }
+.pg.cas > *:not(.list):not(.grid):nth-child(5) { animation-delay: 0.20s; }
+.pg.cas > *:not(.list):not(.grid):nth-child(6) { animation-delay: 0.25s; }
+
+/* Stagger grid tiles (first 10) */
+.pg.cas .grid > *:nth-child(1)  { animation-delay: 0.12s; }
+.pg.cas .grid > *:nth-child(2)  { animation-delay: 0.17s; }
+.pg.cas .grid > *:nth-child(3)  { animation-delay: 0.22s; }
+.pg.cas .grid > *:nth-child(4)  { animation-delay: 0.27s; }
+.pg.cas .grid > *:nth-child(5)  { animation-delay: 0.32s; }
+.pg.cas .grid > *:nth-child(6)  { animation-delay: 0.37s; }
+.pg.cas .grid > *:nth-child(7)  { animation-delay: 0.42s; }
+.pg.cas .grid > *:nth-child(8)  { animation-delay: 0.47s; }
+.pg.cas .grid > *:nth-child(9)  { animation-delay: 0.52s; }
+.pg.cas .grid > *:nth-child(10) { animation-delay: 0.57s; }
+
+/* Stagger list items (first 10) */
+.pg.cas .list > *:nth-child(1)  { animation-delay: 0.12s; }
+.pg.cas .list > *:nth-child(2)  { animation-delay: 0.17s; }
+.pg.cas .list > *:nth-child(3)  { animation-delay: 0.22s; }
+.pg.cas .list > *:nth-child(4)  { animation-delay: 0.27s; }
+.pg.cas .list > *:nth-child(5)  { animation-delay: 0.32s; }
+.pg.cas .list > *:nth-child(6)  { animation-delay: 0.37s; }
+.pg.cas .list > *:nth-child(7)  { animation-delay: 0.42s; }
+.pg.cas .list > *:nth-child(8)  { animation-delay: 0.47s; }
+.pg.cas .list > *:nth-child(9)  { animation-delay: 0.52s; }
+.pg.cas .list > *:nth-child(10) { animation-delay: 0.57s; }
+
+/* ---- Component animations ---- */
+.tick {
+  animation: popin .5s cubic-bezier(.3, 1.6, .5, 1) both; /* bouncy check */
+}
+
+.err:not(:empty) {
+  animation: shake .35s; /* shake when an error appears */
+}
+
+.wk,
+.tl {
+  animation: fade .4s both;
+}
+
+.meter i {
+  transform-origin: left;
+  animation: grow .9s .2s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.slot.now .dot {
+  animation: pulse 1.6s infinite; /* pulsing "live" dot */
+}
+
+/* Slide-in helpers (JS adds these classes) */
+.sl-r {
+  animation: slr .42s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.sl-l {
+  animation: sll .42s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+/* ---- Hover / press feedback ---- */
+.stat,
+.item,
+.btn,
+.chip,
+.tab {
+  transition: transform .2s ease, box-shadow .2s ease, background .2s, color .2s;
+}
+
+/* Hover lift only on devices that actually support hover */
+@media (hover: hover) {
+  .stat:hover,
+  .item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .12);
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.btn:active,
+.tab:active,
+.chip:active {
+  transform: scale(.97);
+}
+
+/* ---- Switching between login and site views ---- */
+#loginView.slide-out  { animation: outl .38s ease both; }
+#siteView.slide-in    { animation: inr2 .5s cubic-bezier(.2, .8, .2, 1) backwards; }
+#loginView.slide-back { animation: inl2 .5s cubic-bezier(.2, .8, .2, 1) backwards; }
+
+
+/* ==========================================================================
+   16. MOTION PREFERENCES & PRINT
+   ========================================================================== */
+
+/* Respect "reduce motion" system setting: turn all animation off */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .pg.from-r,
+  .pg.from-l {
+    animation: none;
+  }
+}
+
+/* Print: hide interactive chrome, use plain black on white */
+@media print {
+  .bar,
+  .tabs,
+  footer,
+  .btns,
+  .themebtn,
+  .sheet {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000;
+  }
+}
+
+
+/* ==========================================================================
+   17. LOGIN EXTRAS, NOTIFICATIONS & NOTICE DOT
+   --------------------------------------------------------------------------
+   Styles for classes that script.js uses but the sections above did not
+   define: .scr-in, .pop, .tilting, .spin / .loading, .gw, .nbox, .ncard,
+   .drag / .out / .collapse, .ndot / .has-dot.
+   ========================================================================== */
+
+/* ---- Login screen: height eases when the content changes ----
+   script.js measures #scrIn and sets the height of #scr (.screen). */
+.screen {
+  overflow: hidden;
+  transition: height .45s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Inner wrapper that holds the status bar and the form / done panes */
+.scr-in {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- Role logo: ring colour follows the selected role ---- */
+.logo {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--input);
+  border: 2px solid var(--ring, var(--gold));
+  box-shadow: 0 0 0 5px var(--t10);
+}
+
+#phoneBox[data-role="student"] { --ring: var(--gold); }
+#phoneBox[data-role="staff"]   { --ring: #2f7d6b; }
+#phoneBox[data-role="admin"]   { --ring: var(--red); }
+
+/* Re-triggered by script.js each time the role changes */
+.logo.pop {
+  animation: logopop .45s cubic-bezier(.3, 1.6, .5, 1);
+}
+
+@keyframes logopop { from { opacity: .4; transform: scale(.6); } }
+
+/* ---- Login box: tilts toward the mouse + soft highlight (desktop) ----
+   script.js sets --rx, --ry (tilt) and --mx, --my (highlight position). */
+.phone {
+  position: relative;
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform .25s ease;
+}
+
+.phone.tilting {
+  transition: transform .08s linear;
+}
+
+.phone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s ease;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%),
+              rgba(255, 255, 255, .28), transparent 60%);
+}
+
+.phone.tilting::after {
+  opacity: 1;
+}
+
+/* ---- Sign-in button: spinner while "signing in" ---- */
+.btn .spin {
+  display: none;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid rgba(255, 255, 255, .4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+.btn.loading .spin {
+  display: inline-block;
+}
+
+.btn.loading:disabled {
+  opacity: .85;
+  cursor: progress;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The spinner is a status indicator, so keep it moving (slowly) even when
+   other motion is reduced. */
+@media (prefers-reduced-motion: reduce) {
+  .btn .spin {
+    animation: spin 1.6s linear infinite !important;
+  }
+}
+
+/* ---- Greeting word ("Good morning" ...), swapped by the live clock ---- */
+.gw {
+  display: inline-block;
+}
+
+/* ---- Red dot on the Notices tab while there are unread notices ---- */
+.tab .ndot {
+  display: none;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.tab.has-dot .ndot {
+  display: inline-block;
+}
+
+/* ---- Notifications card (shown on every dashboard) ---- */
+.nbox {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--ghost);
+  border: 1px solid var(--ghost-border);
+}
+
+.nhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.nhead h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+}
+
+/* Count bubble next to the heading */
+.ncount {
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.nlist {
+  display: grid;
+  gap: 10px;
+}
+
+/* One notification. Swipe left/right to dismiss (see script.js). */
+.ncard {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 40px 12px 12px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--input);
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: pan-y;      /* vertical scroll still works, horizontal swipe is ours */
+  user-select: none;
+  transition: transform .35s cubic-bezier(.2, .8, .2, 1),
+              opacity .35s ease,
+              height .3s ease,
+              padding .3s ease,
+              margin .3s ease,
+              border-width .3s ease;
+}
+
+/* Unread notification */
+.ncard.new {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--t15);
+}
+
+/* While the finger / mouse is dragging: follow it with no easing */
+.ncard.drag {
+  transition: none;
+  cursor: grabbing;
+}
+
+/* Step 1 of dismissing: slide away and fade */
+.ncard.out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Step 2: fold the height to zero (the grid gap is cancelled by the margins) */
+.ncard.collapse {
+  height: 0 !important;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: -5px;
+  margin-bottom: -5px;
+  border-width: 0;
+}
+
+.ni {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.nb {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb b {
+  display: block;
+  font-size: 14px;
+}
+
+.nb p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* "View" link inside a notification */
+.nl {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Small ✕ remove button */
+.nx {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nx:hover {
+  background: var(--ghost);
+}
+
+/* "You're all caught up" message */
+.nempty {
+  margin: 0;
+  text-align: center;
+}
+
+/* ==========================================================================
+   17. SMOOTHER MOTION + CLOSED COMPLAINTS
+   ----------------------------------------------------------------------
+   One shared easing curve so everything decelerates the same way. These rules
+   come last, so they refine the earlier ones. Reduce-motion (section 16)
+   still switches all of it off.
+   ========================================================================== */
+
+:root {
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-io: cubic-bezier(.65, 0, .35, 1);
+}
+
+/* Light / dark switch fades instead of snapping */
+body {
+  transition: background-color .35s var(--ease-out), color .35s var(--ease-out);
+}
+
+/* Page slide: a little longer, with a soft landing */
+.pg.from-r { animation: inr .42s var(--ease-out) both; }
+.pg.from-l { animation: inl .42s var(--ease-out) both; }
+
+/* Cascade: only the curve and length change; the per-item delays above stay */
+.pg.cas > *:not(.list):not(.grid),
+.pg.cas .list > *,
+.pg.cas .grid > * {
+  animation-duration: .55s;
+  animation-timing-function: var(--ease-out);
+}
+
+/* Hover / press feedback eases out instead of a flat "ease" */
+.stat,
+.item,
+.btn,
+.chip,
+.tab {
+  transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out), background .25s, color .25s, border-color .25s;
+}
+
+/* Notice accordion opens a touch slower and settles gently */
+.dd { transition: grid-template-rows .45s var(--ease-out); }
+.chev { transition: transform .4s var(--ease-out); }
+
+/* Progress dots and lines change colour smoothly */
+.stp i,
+.stp::before { transition: background-color .4s var(--ease-out); }
+.meter i { transition: width .6s var(--ease-out); }
+
+/* ---- "Closed by admin" box (admin, student and staff Complaints pages) ---- */
+.clnote {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+}
+
+.clnote b { font-size: 13px; }
+.clnote p { margin: 4px 0 0; font-size: 14px; color: var(--text); }
+.clnote .clmeta { font-size: 12px; color: var(--muted); }
+
+/* A closure the person has not seen yet drops in once */
+.clnote.fresh {
+  box-shadow: 0 0 0 3px var(--t15);
+  animation: clIn .6s var(--ease-out) both;
+}
+
+@keyframes clIn   { from { opacity: 0; transform: translateY(-8px) scale(.98); } }
+@keyframes stepPop { 0% { transform: scale(.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes flashbg { from { background: var(--t15); } }
+
+/* Admin: the complaint that was just moved or closed gets a short highlight */
+.item.flash { animation: flashbg 1.1s var(--ease-out); }
+.item.flash .stp.done i { animation: stepPop .55s var(--ease-out) both; }
+.item.flash .stp.done::before { transform-origin: left; animation: grow .55s var(--ease-out) both; }
+.item.flash .stp:nth-child(2) i, .item.flash .stp:nth-child(2)::before { animation-delay: .06s; }
+.item.flash .stp:nth-child(3) i, .item.flash .stp:nth-child(3)::before { animation-delay: .12s; }
+.item.flash .stp:nth-child(4) i, .item.flash .stp:nth-child(4)::before { animation-delay: .18s; }
+
+
+/* ==========================================================================
+   18. THEME SWITCH: soft vertical sweep (started by toggleTheme in script.js)
+   ========================================================================== */
+
+/* We animate the new view ourselves, so switch off the default cross-fade */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) { z-index: 1; }
+
+/* The new theme is revealed through a mask with a thin soft edge (about 4% of the
+   screen). A wide edge would blend light and dark into a muddy grey. */
+::view-transition-new(root) {
+  z-index: 2;
+  -webkit-mask-size: 100% 200%;
+  mask-size: 100% 200%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* Going dark: the edge moves from the top to the bottom */
+html[data-swap="dark"]::view-transition-new(root) {
+  -webkit-mask-image: linear-gradient(to bottom, #000 48%, transparent 52%);
+  mask-image: linear-gradient(to bottom, #000 48%, transparent 52%);
+  animation: sweep .8s cubic-bezier(.45, 0, .25, 1) both;
+}
+
+/* Going light: the edge moves from the bottom to the top */
+html[data-swap="light"]::view-transition-new(root) {
+  -webkit-mask-image: linear-gradient(to top, #000 48%, transparent 52%);
+  mask-image: linear-gradient(to top, #000 48%, transparent 52%);
+  animation: sweep-up .8s cubic-bezier(.45, 0, .25, 1) both;
+}
+
+@keyframes sweep-up {
+  from { -webkit-mask-position: 0 0;    mask-position: 0 0; }
+  to   { -webkit-mask-position: 0 100%; mask-position: 0 100%; }
+}
+
+@keyframes sweep {
+  from { -webkit-mask-position: 0 100%; mask-position: 0 100%; }
+  to   { -webkit-mask-position: 0 0;    mask-position: 0 0; }
+}
+
+/* While it runs, no other colour fades (they would tint the snapshot) */
+.theme-anim *,
+.theme-anim *::before,
+.theme-anim *::after {
+  transition: none !important;
+}
+
+/* Press feedback on the sun / moon button */
+.themebtn { transition: transform .5s var(--ease-out); }
+.themebtn:active { transform: rotate(40deg) scale(.92); }
