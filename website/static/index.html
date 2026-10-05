@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>College Connect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,19 +18,19 @@
 <div class="menu" role="menu"><button role="menuitem" data-sheet="about" type="button"><span aria-hidden="true">ℹ️</span> About us</button>
 <button role="menuitem" data-sheet="complaint" type="button"><span aria-hidden="true">📝</span> Complaint box</button>
 <button role="menuitem" data-sheet="issue" type="button"><span aria-hidden="true">🐞</span> Report an issue</button></div></div>
-<span class="brand">🎓 College Connect</span></div>
+<span class="brand brand-font"><img class="brand-logo" src="logo.png" alt="" width="40" height="29" decoding="async">Campbit</span></div>
 <div class="hr"><select class="langsel" aria-label="Language"><option value="en">English</option>
 <option value="hi">हिन्दी</option><option value="or">ଓଡ଼ିଆ</option></select>
 <button class="btn ghost sm themebtn" data-tt type="button" aria-label="Toggle light or dark mode" title="Toggle light / dark">🌙</button></div></header>
 
 <main id="login" class="wrap">
 <div class="lead"><h1 data-ih="lead">Your campus, in your <span class="red">pocket</span>
-</h1><p>Sign in to see everything College Connect has for you.</p></div>
+</h1><p>Sign in to see everything Campbit has for you.</p></div>
   <div class="phone" id="phoneBox" data-role="student"><div class="screen" id="scr"><div class="scr-in" id="scrIn">
    <div class="status"><span id="clock">9:41</span><span>● ● ▮</span></div>
    <div id="formPane" style="display:flex;flex-direction:column;gap:12px">
     <div class="logo" id="roleLogo">🎓</div>
-    <h2>College Connect</h2><p>Your campus, in your pocket</p>
+    <h2 class="brand-font">Campbit</h2><p>Your campus, in your pocket</p>
     <h2 id="greet" style="margin-top:8px">Welcome back</h2><p id="roleHint">Sign in as a student</p>
     <div class="seg" id="seg" role="tablist"><button type="button" class="on" data-role="student">Student</button>
     <button type="button" data-role="staff">Staff</button><button type="button" data-role="admin">Admin</button></div>
@@ -42,9 +45,10 @@
     <p>Need help? <a class="red" href="mailto:admin@collegeconnect.example?subject=Help%20with%20College%20Connect">Contact Admin Office</a></p>
    </div>
    <div id="donePane" class="hidden">
-    <div class="tick">✓</div><h2>You're signed in</h2><p>Welcome to College Connect.</p>
+    <div class="tick">✓</div><h2>You're signed in</h2><p>Welcome to Campbit.</p>
    </div>
   </div></div></div>
+  <div class="mascot" aria-hidden="true"><img src="guard.webp" alt="" width="190" height="450" decoding="async" draggable="false"></div>
  </main>
 </div>
 
@@ -55,12 +59,13 @@
 <div class="menu" role="menu"><button role="menuitem" data-sheet="about" type="button"><span aria-hidden="true">ℹ️</span> About us</button>
 <button role="menuitem" data-sheet="complaint" type="button"><span aria-hidden="true">📝</span> Complaint box</button>
 <button role="menuitem" data-sheet="issue" type="button"><span aria-hidden="true">🐞</span> Report an issue</button>
-</div></div><a class="brand" href="#" data-go="home">🎓 College Connect</a></div>
+</div></div><a class="brand" href="#" data-go="home">🎓 Campbit</a></div>
 <div class="hr"><select class="langsel" aria-label="Language"><option value="en">English</option>
 <option value="hi">हिन्दी</option><option value="or">ଓଡ଼ିଆ</option></select>
 <button class="btn ghost sm themebtn" data-tt type="button" aria-label="Toggle light or dark mode" title="Toggle light / dark">🌙</button>
 <button class="btn ghost sm" id="logout" type="button">Sign out</button></div></header>
  <div class="tabs" id="tabs" role="tablist"></div>
+ <div class="wrap hidden" id="backrow"><button class="btn ghost sm" id="backBtn" data-back type="button">← Back</button></div>
  <main class="wrap">
   <section class="pg" id="pg-home"></section>
   <section class="pg hidden" id="pg-timetable"></section>
@@ -72,6 +77,7 @@
   <section class="pg hidden" id="pg-mess"></section>
   <section class="pg hidden" id="pg-students"></section>
   <section class="pg hidden" id="pg-staff"></section>
+  <section class="pg hidden" id="pg-accounts"></section>
   <section class="pg hidden" id="pg-achievements"></section>
   <section class="pg hidden" id="pg-notices"></section>
   <section class="pg hidden" id="pg-holidays"></section>
@@ -79,14 +85,16 @@
   <section class="pg hidden" id="pg-leave"></section>
   <section class="pg hidden" id="pg-profile"></section>
  </main>
- <footer>© 2026 College Connect · Demo data for preview only.</footer>
+ <footer>© 2026 Campbit · Demo data for preview only.</footer>
 </div>
 
 <div id="sheet" class="sheet hidden"><div class="sback" data-close></div>
 <div class="spanel" role="dialog" aria-modal="true" aria-label="Details">
+<button class="btn ghost sm sbk" data-close type="button">← Back</button>
 <button class="sx" data-close type="button" aria-label="Close">✕</button>
 <div id="sbody"></div></div></div>
 
+<script src="api.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
