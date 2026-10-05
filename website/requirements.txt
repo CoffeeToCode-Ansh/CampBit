@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 PyJWT
 python-multipart
+psycopg[binary]
