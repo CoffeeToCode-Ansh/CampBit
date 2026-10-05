@@ -67,18 +67,26 @@ const getRole = () => {
 const escapeHtml = value =>
   String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Full name from the signed-in account (set at login from the server)
+const accountName = () => {
+  try { return sessionStorage.getItem('cc_name') || ''; }
+  catch (e) { return ''; }
+};
+
 // Name of the signed-in user (escaped, safe for HTML)
 const displayName = () => {
   let name = 'Student';
   try {
-    name = sessionStorage.getItem('cc_user') ||
+    name = accountName() || sessionStorage.getItem('cc_user') ||
       (getRole() === 'staff' ? 'Staff' : getRole() === 'admin' ? 'Admin' : 'Student');
   } catch (e) {}
+  if (getRole() === 'admin' && adminProfile().name) name = adminProfile().name;   // name edited on the profile page
   return escapeHtml(name);
 };
 
 // Same name but NOT escaped (used when storing who did something)
 const userName = () => {
+  if (getRole() === 'admin' && adminProfile().name) return adminProfile().name;
   try { return sessionStorage.getItem('cc_user') || 'Student'; }
   catch (e) { return 'Student'; }
 };
@@ -94,6 +102,16 @@ const loadJson = (key, fallback) => {
 const saveJson = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
 };
+
+// Admin profile (name, photo, contact details) is saved in "cc_admin_prof".
+// Anything the admin has not edited falls back to these defaults.
+const ADMIN_PROFILE_DEFAULTS = {
+  name: '', photo: '', title: 'Administrator', adminId: 'ADM-001',
+  email: 'admin@college.example', phone: '+91 90000 00000',
+  department: 'Administration', office: 'Admin Block, Room 1',
+  joined: 'January 2018', emergency: '', about: ''
+};
+const adminProfile = () => Object.assign({}, ADMIN_PROFILE_DEFAULTS, loadJson('cc_admin_prof', {}));
 
 // Numbers & money
 const percent = (part, total) => Math.round(part / total * 100);
@@ -222,7 +240,7 @@ const STAFF_TABS = [
 ];
 const ADMIN_TABS = [
   ["home", "Home"], ["students", "Students"], ["staff", "Staff"], ["achievements", "Achievements"],
-  ["complaints", "Complaints"], ["notices", "Notices"],["leave", "Leave"], ["holidays", "Holidays"], ["profile", "Profile"]
+  ["complaints", "Complaints"], ["notices", "Notices"],["leave", "Leave"], ["holidays", "Holidays"], ["accounts", "Accounts"], ["profile", "Profile"]
 ];
 const currentTabs = () =>
   getRole() === 'staff' ? STAFF_TABS : getRole() === 'admin' ? ADMIN_TABS : STUDENT_TABS;
@@ -559,7 +577,7 @@ function submitLeave() {
   if (role === 'staff') entry.n = userName();
   leaveRequests[role].unshift(entry);
   // A student's request also goes to the teachers' review list
-  if (role === 'student') studentApprovals.unshift({ id: entry.id, n: userName() + ' · CS23-0142', t: entry.t, f: from, to, r: reason, s: 'Pending' });
+  if (role === 'student') studentApprovals.unshift({ id: entry.id, n: (accountName() || userName()) + ' · ' + userName().toUpperCase(), t: entry.t, f: from, to, r: reason, s: 'Pending' });
   saveLeave();
   leaveMessage = role === 'staff'
     ? '✅ Leave request sent to the admin. Status: Pending.'
@@ -630,6 +648,7 @@ function renderStaffHome() {
 
   return `<h2>${greetingHtml()}, ${displayName()} 👋</h2>` +
     `<p class="sub">Staff dashboard · Department of Computer Science</p>` +
+    searchBox('s', 'sq-home', 'Search students…', '') +
     `<div class="grid">` +
       `<button class="stat" data-go="timetable"><span>Classes today</span><b>${classesToday}</b><span>${classesToday ? 'Open timetable' : 'No classes today'}</span></button>` +
       `<button class="stat" data-go="leave"><span>Requests to review</span><b>${pendingRequests}</b><span>Student leave</span></button>` +
@@ -638,24 +657,26 @@ function renderStaffHome() {
     `</div>` + renderNotifications() + renderTodayTimetable();
 }
 
-// Staff profile page
+// Staff profile page (shows the admin-edited record when the signed-in ID matches one)
 function renderStaffProfile() {
+  const r = myStaff();
+  const v = (key, demo) => escapeHtml(r ? (r[key] || '—') : demo);
   return `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
-    `<div class="item" style="display:flex;gap:16px;align-items:center;margin-bottom:14px">` +
-      `<div class="avatar">${displayName()[0].toUpperCase()}</div>` +
-      `<div><b style="font-size:20px">${displayName()}</b><p>Assistant Professor · Computer Science</p></div></div>` +
+    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(r.photo, r.name) : avatarInner('')}</div>` +
+      `<div class="pinfo"><b class="pname">${r ? escapeHtml(r.name) : displayName()}</b>` +
+      `<p>${r ? escapeHtml(r.pos + ' · ' + r.dept) : 'Assistant Professor · Computer Science'}</p></div></div>` +
     `<div class="kv">` +
-      `<div><small>Employee ID</small>EMP-1024</div>` +
-      `<div><small>Email</small>staff@college.example</div>` +
-      `<div><small>Phone</small>+91 91234 56780</div>` +
-      `<div><small>Department</small>Computer Science &amp; Engineering</div>` +
-      `<div><small>Joined</small>July 2019</div>` +
-      `<div><small>Cabin</small>Block A, Room 12</div>` +
-      `<div><small>Subjects</small>Data Structures, Algorithms</div>` +
-      `<div><small>Mentor group</small>Semester 3, Section A</div>` +
+      `<div><small>Employee ID</small>${r ? escapeHtml(r.id) : escapeHtml(userName().toUpperCase())}</div>` +
+      `<div><small>Email</small>${v('email', 'staff@college.example')}</div>` +
+      `<div><small>Phone</small>${v('phone', '+91 91234 56780')}</div>` +
+      `<div><small>Department</small>${r ? escapeHtml(r.dept) : 'Computer Science &amp; Engineering'}</div>` +
+      `<div><small>Joined</small>${r ? (r.joined ? longDate(r.joined) : '—') : 'July 2019'}</div>` +
+      `<div><small>Cabin</small>${v('cabin', 'Block A, Room 12')}</div>` +
+      `<div><small>Subjects</small>${v('subjects', 'Data Structures, Algorithms')}</div>` +
+      (r ? `<div><small>Qualification</small>${v('qualification', '')}</div>` : `<div><small>Mentor group</small>Semester 3, Section A</div>`) +
     `</div>` +
     `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>` +
-    `<p class="demo">All details shown are demo data.</p>` +
+    `<p class="demo">${r ? 'Your details are kept up to date by the admin office.' : 'All details shown are demo data.'}</p>` +
     `<p class="swipe-hint">Tip: swipe left or right anywhere on a page to switch menus.</p>`;
 }
 
@@ -672,6 +693,8 @@ let prevRole = 'student';   // remembers the last role so we can slide left/righ
 
 // Show the login screen again (after sign out)
 function showLogin() {
+  navStack.length = 0;
+  updateBack();
   $('siteView').classList.add('hidden');
   $('loginView').classList.remove('hidden', 'slide-back');
   void $('loginView').offsetWidth;                // restart the CSS animation
@@ -1359,6 +1382,21 @@ const TRANSLATIONS = [
   ["Profile", "प्रोफ़ाइल", "ପ୍ରୋଫାଇଲ୍"],
   ["Students", "विद्यार्थी", "ଛାତ୍ରଛାତ୍ରୀ"],
   ["Edit", "संपादित करें", "ସଂପାଦନା କରନ୍ତୁ"],
+  ["Edit profile", "प्रोफ़ाइल संपादित करें", "ପ୍ରୋଫାଇଲ୍ ସମ୍ପାଦନ କରନ୍ତୁ"],
+  ["Back", "वापस", "ପଛକୁ"],
+  ["All departments", "सभी विभाग", "ସମସ୍ତ ବିଭାଗ"],
+  ["All years", "सभी वर्ष", "ସମସ୍ତ ବର୍ଷ"],
+  ["Back to students", "छात्रों पर वापस", "ଛାତ୍ରମାନଙ୍କ ପାଖକୁ ଫେରନ୍ତୁ"],
+  ["Back to staff", "स्टाफ़ पर वापस", "କର୍ମଚାରୀଙ୍କ ପାଖକୁ ଫେରନ୍ତୁ"],
+  ["Search students…", "छात्र खोजें…", "ଛାତ୍ର ଖୋଜନ୍ତୁ…"],
+  ["Search teachers…", "शिक्षक खोजें…", "ଶିକ୍ଷକ ଖୋଜନ୍ତୁ…"],
+  ["Search students or teachers…", "छात्र या शिक्षक खोजें…", "ଛାତ୍ର କିମ୍ବା ଶିକ୍ଷକ ଖୋଜନ୍ତୁ…"],
+  ["Try searching", "इन्हें खोजकर देखें", "ଏସବୁ ଖୋଜି ଦେଖନ୍ତୁ"],
+  ["No one matches your search.", "आपकी खोज से कोई मेल नहीं खाता।", "ଆପଣଙ୍କ ସନ୍ଧାନ ସହ କେହି ମେଳ ଖାଉନାହାଁନ୍ତି।"],
+  ["No matches. Try a name, roll number, ID or department.", "कोई परिणाम नहीं। नाम, रोल नंबर, आईडी या विभाग आज़माएँ।", "କିଛି ମିଳିଲା ନାହିଁ। ନାମ, ରୋଲ୍ ନମ୍ବର, ଆଇଡି କିମ୍ବା ବିଭାଗ ଚେଷ୍ଟା କରନ୍ତୁ।"],
+  ["Save changes", "बदलाव सहेजें", "ପରିବର୍ତ୍ତନ ସେଭ୍ କରନ୍ତୁ"],
+  ["Choose photo", "फ़ोटो चुनें", "ଫଟୋ ବାଛନ୍ତୁ"],
+  ["Remove photo", "फ़ोटो हटाएँ", "ଫଟୋ ହଟାନ୍ତୁ"],
   ["Save", "सहेजें", "ସେଭ୍ କରନ୍ତୁ"],
   ["Cancel", "रद्द करें", "ବାତିଲ୍ କରନ୍ତୁ"],
   ["Close with reason", "कारण देकर बंद करें", "କାରଣ ଦେଇ ବନ୍ଦ କରନ୍ତୁ"],
@@ -1542,11 +1580,15 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'mcls') { selectedClass = +t.value; marks = {}; render(); }          // teacher picks a class
   else if (t.id === 'cphoto') handlePhoto(t);                                        // complaint photo
+  else if (t.id === 'pphoto') handleProfilePhoto(t);                                 // admin profile photo
+  else if (t.id === 'pzphoto') handlePersonPhoto(t);                                 // student / staff photo (admin)
   else if (t.id === 'ccs') updateMissCalculator();                                   // attendance calculator
+  else if (t.dataset && t.dataset.sdept !== undefined) setSearchFilter(t.dataset.sdept, 'dept', t.value);   // search: Department
   else if (t.dataset && t.dataset.pos !== undefined) setPosition(+t.dataset.pos, t.value);  // admin: staff position
   else if (t.classList && t.classList.contains('langsel')) setLang(t.value);         // language dropdown
 });
 document.addEventListener('input', e => {
+  if (e.target.classList && e.target.classList.contains('sinp')) onSearchInput(e.target);
   if (e.target.id === 'ccn' || e.target.id === 'ccs') updateMissCalculator();
 });
 
@@ -1590,6 +1632,79 @@ const STAFF_LIST = loadJson('cc_staff', [
   { id: 'EMP-1085', name: 'Mr. B. Sahoo', dept: 'ECE', pos: 'Warden' }
 ]);
 
+// ----- Departments -----
+// Students get their department from the course ("B.Tech CSE" -> "CSE"); teachers have it saved.
+const DEPT_ALIASES = {
+  'computer science': 'CSE', 'computer science & engineering': 'CSE', 'computer science and engineering': 'CSE',
+  'information technology': 'IT', 'electronics': 'ECE', 'electrical': 'EEE',
+  'mechanical engineering': 'Mechanical', 'civil engineering': 'Civil', 'maths': 'Mathematics'
+};
+const deptName = d => { const k = String(d || '').trim(); return DEPT_ALIASES[k.toLowerCase()] || k; };
+const courseDept = c => String(c || '').replace(/^B\.?Tech\s+/i, '').trim();
+const studentDept = s => s.dept ? deptName(s.dept) : courseDept(s.course);
+const staffDept = x => deptName(x.dept);
+
+// ----- Extra demo people: 20 students and 10 teachers -----
+// They are added once to whatever is already saved (nothing is overwritten or duplicated).
+const YEAR_BATCH = { 1: '2025–2029', 2: '2024–2028', 3: '2023–2027', 4: '2022–2026' };
+const DEPT_MENTOR = { CSE: 'Dr. A. Mishra', IT: 'Dr. S. Mohapatra', ECE: 'Dr. R. Patra', EEE: 'Prof. N. Pattnaik',
+  Mechanical: 'Dr. M. Rath', Civil: 'Ms. A. Biswal', MCA: 'Mr. T. Sethi', MBA: 'Dr. P. Kar' };
+const SEED_BLOOD = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'];
+const SEED_CITIES = ['Bhubaneswar', 'Cuttack', 'Puri', 'Berhampur', 'Sambalpur', 'Rourkela'];
+const SEED_PHONE = (n, a) => ['9437', '9861', '7008', '6371'][n % 4] + String(a + n * 7919).slice(0, 6);
+
+const SEED_STUDENTS = [
+  ['CS25-0012', 'Anjali Mishra', 'B.Tech CSE', 1], ['CS24-0045', 'Biswajit Patnaik', 'B.Tech CSE', 2, true],
+  ['CS22-0078', 'Chandini Mohapatra', 'B.Tech CSE', 4], ['IT25-0008', 'Debjani Swain', 'B.Tech IT', 1],
+  ['IT23-0027', 'Gaurav Tripathy', 'B.Tech IT', 3], ['IT22-0016', 'Harsha Choudhury', 'B.Tech IT', 4],
+  ['EC24-0031', 'Itishree Parida', 'B.Tech ECE', 2], ['EC23-0052', 'Jagannath Dash', 'B.Tech ECE', 3, true],
+  ['EC25-0019', 'Lipsa Sethy', 'B.Tech ECE', 1], ['EE23-0014', 'Manoj Sahoo', 'B.Tech EEE', 3],
+  ['EE24-0023', 'Namita Behera', 'B.Tech EEE', 2], ['EE22-0036', 'Omkar Mallick', 'B.Tech EEE', 4],
+  ['ME23-0041', 'Pratyush Satpathy', 'B.Tech Mechanical', 3], ['ME25-0027', 'Rashmi Nanda', 'B.Tech Mechanical', 1],
+  ['CE24-0018', 'Subham Acharya', 'B.Tech Civil', 2], ['CE22-0029', 'Tanushree Mahapatra', 'B.Tech Civil', 4],
+  ['MC24-0009', 'Uttam Jena', 'MCA', 2], ['MC25-0013', 'Vandana Rout', 'MCA', 1],
+  ['MB24-0006', 'Yashwant Singh', 'MBA', 2], ['MB25-0021', 'Zeenat Parveen', 'MBA', 1]
+].map(([roll, name, course, year, cr], n) => {
+  const parts = name.split(' ');
+  return {
+    roll, name, course, year, batch: YEAR_BATCH[year], cr: !!cr,
+    email: parts[0].toLowerCase() + '.' + parts[parts.length - 1].toLowerCase() + '@college.example',
+    phone: SEED_PHONE(n, 120000),
+    mentor: DEPT_MENTOR[courseDept(course)] || '',
+    hostel: 'Block ' + 'ABCD'[n % 4] + ', Room ' + (101 + (n * 37) % 200),
+    guardian: 'Mr. ' + parts[parts.length - 1] + ' · ' + SEED_PHONE(n + 3, 450000),
+    blood: SEED_BLOOD[n % 8],
+    address: SEED_CITIES[n % 6] + ', Odisha'
+  };
+});
+
+const SEED_STAFF = [
+  ['EMP-1092', 'Dr. S. Mohapatra', 'IT', 'HOD', '2015-06-15', 'Operating Systems, Networks', 'Block B, Room 2', 'Ph.D. (IT)'],
+  ['EMP-1098', 'Prof. N. Pattnaik', 'EEE', 'HOD', '2012-07-02', 'Power Systems, Machines', 'Block C, Room 1', 'Ph.D. (Electrical)'],
+  ['EMP-1104', 'Dr. M. Rath', 'Mechanical', 'Faculty', '2017-01-10', 'Thermodynamics, Fluid Mechanics', 'Workshop Block, Room 4', 'Ph.D. (Mechanical)'],
+  ['EMP-1109', 'Ms. A. Biswal', 'Civil', 'Class Coordinator', '2019-08-05', 'Structural Analysis, Surveying', 'Block D, Room 6', 'M.Tech (Structures)'],
+  ['EMP-1115', 'Mr. T. Sethi', 'MCA', 'Mentor', '2018-11-19', 'Python, Databases', 'Block B, Room 9', 'M.Tech (CSE)'],
+  ['EMP-1121', 'Dr. P. Kar', 'MBA', 'Placement Officer', '2014-03-24', 'Marketing, Business Ethics', 'Admin Block, Room 5', 'Ph.D. (Management)'],
+  ['EMP-1126', 'Ms. D. Mallick', 'ECE', 'Faculty', '2020-02-17', 'Digital Electronics, Signals', 'Block A, Room 8', 'M.Tech (VLSI)'],
+  ['EMP-1133', 'Dr. G. Tripathy', 'Mathematics', 'Exam Cell Incharge', '2013-09-09', 'Linear Algebra, Probability', 'Block A, Room 2', 'Ph.D. (Mathematics)'],
+  ['EMP-1140', 'Mr. R. Nanda', 'CSE', 'Faculty', '2021-07-26', 'Web Technologies, Java', 'Block A, Room 14', 'M.Tech (CSE)'],
+  ['EMP-1147', 'Ms. S. Jena', 'IT', 'Faculty', '2022-01-31', 'Data Mining, Cloud Computing', 'Block B, Room 5', 'M.Tech (IT)']
+].map(([id, name, dept, pos, joined, subjects, cabin, qualification], n) => ({
+  id, name, dept, pos, joined, subjects, cabin, qualification,
+  email: name.replace(/^(Dr|Prof|Ms|Mr)\.\s*/, '').toLowerCase().replace(/\.?\s+/g, '.') + '@college.example',
+  phone: SEED_PHONE(n + 1, 260000)
+}));
+
+// Add the extras once (a flag in storage remembers it, so anything an admin removes later stays removed)
+function mergeSeed(list, extras, key, flag, storeKey) {
+  try { if (localStorage.getItem(flag)) return; } catch (e) {}
+  extras.forEach(x => { if (!list.some(o => o[key] === x[key])) list.push(x); });
+  saveJson(storeKey, list);
+  try { localStorage.setItem(flag, '1'); } catch (e) {}
+}
+mergeSeed(STUDENTS, SEED_STUDENTS, 'roll', 'cc_seed_s1', 'cc_stud');
+mergeSeed(STAFF_LIST, SEED_STAFF, 'id', 'cc_seed_t1', 'cc_staff');
+
 // Achievements saved in "cc_ach". st = Pending | Verified | Rejected.
 // vb = verified-by {n name, r role, at time}, eb = edited-by.
 const ACHIEVEMENTS = loadJson('cc_ach', [
@@ -1606,7 +1721,6 @@ const ACHIEVEMENT_CATEGORIES = ['Hackathon', 'Certification', 'Sports', 'Paper /
 const studentPairs = () => STUDENTS.map(s => [s.roll, s.name]);
 
 // Screen state for these pages
-let studentFilter = 'All';   // All | 1 | 2 | 3 | 4 (year)
 let removeConfirm = '';      // roll number waiting for a second tap to remove
 let studentMessage = '';
 let simTime = null;          // demo: pretend the time is this (minutes), null = real time
@@ -1622,57 +1736,86 @@ const nowMinutes = () => simTime !== null ? simTime : new Date().getHours() * 60
 function renderStudents() {
   const message = studentMessage; studentMessage = '';
   const isAdmin = getRole() === 'admin';
-  const rows = STUDENTS.map((s, i) => [s, i]).filter(q => studentFilter === 'All' || String(q[0].year) === studentFilter);
+  // Profile of one student (opened from a search result or by tapping a name)
+  if (viewPerson && viewPerson.kind === 's') {
+    const v = STUDENTS.findIndex(x => x.roll === viewPerson.key);
+    if (v >= 0) return renderPersonView('s', v, message);
+    viewPerson = null;
+  }
+  const rows = STUDENTS.map((s, i) => [s, i]);
+  const f = searchFilters['sq-stud'];
+  const rowOk = s => personMatches('s', s, studentQuery, f);
+  const shownCount = rows.filter(q => rowOk(q[0])).length;
+  const rowAttrs = s => `data-q="${escapeHtml(norm(studentHay(s)))}" data-dept="${escapeHtml(studentDept(s))}" data-year="${s.year}"`;
+  const rowClass = s => rowOk(s) ? '' : ' shide';
+  const active = searchActive('sq-stud', studentQuery);
 
   return `<h2>Students</h2><p class="sub">${STUDENTS.length} students · teachers and admin can add, edit or remove students and assign a CR</p>` +
     successBox(message) +
+    // --- Search ---
+    searchBox('s', 'sq-stud', 'Search students…', studentQuery) + searchNote(active, shownCount, rows.length) +
     // --- Add student form ---
     `<div class="ttcard frm"><b style="font-size:18px">Add a student</b>` +
       `<label for="snm">Full name</label><input id="snm" placeholder="Student name">` +
       `<label for="srl">Roll number</label><input id="srl" placeholder="e.g. CS24-0123">` +
+      (isAdmin
+        ? `<label for="sem">Email (optional, can also be used to sign in)</label><input id="sem" type="email" placeholder="name@gmail.com">` +
+          `<label for="spw">Login password</label><input id="spw" autocomplete="off" placeholder="At least 6 characters. You give this to the student">`
+        : `<p class="sub" style="margin:8px 0 0">Only the admin can create the student's login and password.</p>`) +
       `<div class="two">` +
-        `<div><label for="scr">Course</label><select id="scr">${COURSES.map(c => `<option>${c}</option>`).join('')}</select></div>` +
+        `<div><label for="scrs">Course</label><select id="scrs">${COURSES.map(c => `<option>${c}</option>`).join('')}</select></div>` +
         `<div><label for="syr">Year</label><select id="syr">${[1, 2, 3, 4].map(y => `<option value="${y}">Year ${y}</option>`).join('')}</select></div>` +
       `</div>` +
       `<label for="sbt">Batch</label><select id="sbt">${BATCHES.map(b => `<option>${b}</option>`).join('')}</select>` +
       `<div class="err" id="serr" role="alert"></div>` +
       `<button class="btn" id="sadd" type="button" style="width:100%">Add student</button></div>` +
-    // --- Year filter ---
-    `<div class="chips">` +
-      ['All', '1', '2', '3', '4'].map(y => `<button class="chip ${y === studentFilter ? 'on' : ''}" data-sf="${y}" type="button">${y === 'All' ? 'All' : 'Year ' + y}</button>`).join('') +
-    `</div><div class="list">` +
+    `<div class="list">` +
     (rows.length ? rows.map(q => {
       const s = q[0], i = q[1];
 
       // Edit mode for this student
-      if (editingStudent === i) {
-        return `<div class="item frm"><b>Edit student</b>` +
-          `<label for="esn">Full name</label><input id="esn" value="${escapeHtml(s.name)}">` +
-          (isAdmin
-            ? `<label for="esr">Roll number</label><input id="esr" value="${escapeHtml(s.roll)}">` +
-              `<div class="two">` +
-                `<div><label for="esco">Course</label><select id="esco">${COURSES.map(c => `<option ${c === s.course ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
-                `<div><label for="esy">Year</label><select id="esy">${[1, 2, 3, 4].map(y => `<option value="${y}" ${y === s.year ? 'selected' : ''}>Year ${y}</option>`).join('')}</select></div>` +
-              `</div>` +
-              `<label for="esb">Batch</label><select id="esb">${BATCHES.map(b => `<option ${b === s.batch ? 'selected' : ''}>${b}</option>`).join('')}</select>`
-            : '<p class="sub" style="margin:8px 0 0">Teachers can edit the name. Admin can edit all details.</p>') +
-          `<div class="err" id="eserr" role="alert"></div>` +
-          `<div class="btns" style="margin-top:10px"><button class="btn sm" data-act="ssave:${i}" type="button">Save</button><button class="btn ghost sm" data-act="scancel" type="button">Cancel</button></div></div>`;
-      }
+      if (editingStudent === i) return studentEditForm(s, i, isAdmin, rowClass(s), rowAttrs(s));
 
       // Normal view
-      return `<div class="item"><div class="top"><b>${escapeHtml(s.name)}</b>${s.cr ? '<span class="badge ok">CR</span>' : ''}</div>` +
+      return `<div class="item${rowClass(s)}" ${rowAttrs(s)}><div class="top"><button class="pwho" data-vp="s:${escapeHtml(s.roll)}" type="button" title="Open profile"><span class="avatar sm">${avatarInner(s.photo, s.name)}</span><b>${escapeHtml(s.name)}</b></button>${s.cr ? '<span class="badge ok">CR</span>' : ''}</div>` +
         `<p>${escapeHtml(s.roll)} · ${s.course} · Year ${s.year} · Batch ${s.batch}</p>` +
         `<div class="btns" style="margin-top:10px">` +
+          (isAdmin ? `<button class="btn ghost sm" data-act="sprof:${i}" type="button">Edit profile</button>` : '') +
           `<button class="btn ghost sm" data-act="sed:${i}" type="button">Edit</button>` +
           `<button class="btn ghost sm" data-cr="${i}" type="button">${s.cr ? 'Remove CR' : 'Make CR'}</button>` +
           `<button class="btn ghost sm" data-rm="${i}" type="button">${removeConfirm === s.roll ? 'Tap again to confirm' : 'Remove'}</button>` +
         `</div></div>`;
-    }).join('') : '<p class="sub">No students in this year.</p>') + '</div>';
+    }).join('') : '<p class="sub">No students yet.</p>') + searchNone(active, shownCount, rows.length) + '</div>';
 }
 
 // Add a new student (with validation)
-function addStudent() {
+// Edit forms. The same form is used inside the Students / Staff lists and on a person's profile page,
+// so Edit always opens right where you are.
+function studentEditForm(s, i, isAdmin, cls, attrs) {
+  return `<div class="item frm${cls}" ${attrs}><b>Edit student</b>` +
+    `<label for="esn">Full name</label><input id="esn" value="${escapeHtml(s.name)}">` +
+    (isAdmin
+      ? `<label for="esr">Roll number</label><input id="esr" value="${escapeHtml(s.roll)}">` +
+        `<div class="two">` +
+          `<div><label for="esco">Course</label><select id="esco">${COURSES.map(c => `<option ${c === s.course ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
+          `<div><label for="esy">Year</label><select id="esy">${[1, 2, 3, 4].map(y => `<option value="${y}" ${y === s.year ? 'selected' : ''}>Year ${y}</option>`).join('')}</select></div>` +
+        `</div>` +
+        `<label for="esb">Batch</label><select id="esb">${BATCHES.map(b => `<option ${b === s.batch ? 'selected' : ''}>${b}</option>`).join('')}</select>`
+      : '<p class="sub" style="margin:8px 0 0">Teachers can edit the name. Admin can edit all details.</p>') +
+    `<div class="err" id="eserr" role="alert"></div>` +
+    `<div class="btns" style="margin-top:10px"><button class="btn sm" data-act="ssave:${i}" type="button">Save</button><button class="btn ghost sm" data-act="scancel" type="button">Cancel</button></div></div>`;
+}
+
+function staffEditForm(x, i, cls, attrs) {
+  return `<div class="item frm${cls}" ${attrs}><b>Edit staff member</b>` +
+    `<label for="esfn">Name</label><input id="esfn" value="${escapeHtml(x.name)}">` +
+    `<label for="esfd">Department</label><input id="esfd" value="${escapeHtml(x.dept)}">` +
+    `<label for="esfp">Position</label><select id="esfp">${POSITIONS.map(p => `<option ${p === x.pos ? 'selected' : ''}>${p}</option>`).join('')}</select>` +
+    `<div class="err" id="esferr" role="alert"></div>` +
+    `<div class="btns" style="margin-top:10px"><button class="btn sm" data-act="stsave:${i}" type="button">Save</button><button class="btn ghost sm" data-act="stcancel" type="button">Cancel</button></div></div>`;
+}
+
+async function addStudent() {
   const name = $('snm').value.trim();
   const roll = $('srl').value.trim().toUpperCase();
   const errBox = $('serr');
@@ -1681,9 +1824,21 @@ function addStudent() {
   if (!/^[A-Z0-9-]{4,16}$/.test(roll)) { errBox.textContent = 'Roll number must be 4 to 16 letters, numbers or dashes.'; return; }
   if (STUDENTS.some(s => s.roll === roll)) { errBox.textContent = 'This roll number already exists.'; return; }
 
-  STUDENTS.push({ roll, name, course: $('scr').value, year: +$('syr').value, batch: $('sbt').value, cr: false });
+  const isAdmin = getRole() === 'admin';
+  const email = isAdmin ? $('sem').value.trim() : '';
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errBox.textContent = 'Enter a valid email or leave it empty.'; return; }
+  if (isAdmin) {   // admin: create the login account on the server first
+    const password = $('spw').value;
+    if (password.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+    try {
+      $('sadd').disabled = true;
+      await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: roll, name, role: 'student', password, email }) });
+    } catch (e) { $('sadd').disabled = false; errBox.textContent = e.message; return; }
+  }
+
+  STUDENTS.push({ roll, name, course: $('scrs').value, year: +$('syr').value, batch: $('sbt').value, cr: false, ...(email ? { email } : {}) });
   saveJson('cc_stud', STUDENTS);
-  studentMessage = '✅ ' + escapeHtml(name) + ' (' + roll + ') added.';
+  studentMessage = '✅ ' + escapeHtml(name) + ' (' + roll + ') added.' + (isAdmin ? ' Login created.' : ' Ask the admin to create their login.');
   render();
 }
 
@@ -1710,6 +1865,7 @@ function removeStudent(i) {
   if (removeConfirm === s.roll) {
     STUDENTS.splice(i, 1);
     saveJson('cc_stud', STUDENTS);
+    API.request('/api/users/' + encodeURIComponent(s.roll), { method: 'DELETE' }).catch(() => {});
     removeConfirm = '';
     studentMessage = escapeHtml(s.name) + ' was removed.';
   } else {
@@ -1727,8 +1883,22 @@ let removeStaffConfirm = '';   // employee ID waiting for a second tap to remove
 
 function renderStaff() {
   const message = staffMessage; staffMessage = '';
+  // Profile of one staff member (opened from a search result or by tapping a name)
+  if (viewPerson && viewPerson.kind === 't') {
+    const v = STAFF_LIST.findIndex(x => x.id === viewPerson.key);
+    if (v >= 0) return renderPersonView('t', v, message);
+    viewPerson = null;
+  }
+  const f = searchFilters['sq-staff'];
+  const rowOk = x => personMatches('t', x, staffQuery, f);
+  const shownCount = STAFF_LIST.filter(rowOk).length;
+  const rowAttrs = x => `data-q="${escapeHtml(norm(staffHay(x)))}" data-dept="${escapeHtml(staffDept(x))}"`;
+  const rowClass = x => rowOk(x) ? '' : ' shide';
+  const active = searchActive('sq-staff', staffQuery);
   return `<h2>Staff members</h2><p class="sub">${STAFF_LIST.length} staff · only admin can see this page, add or remove teachers, edit staff and assign positions</p>` +
     successBox(message) +
+    // --- Search ---
+    searchBox('t', 'sq-staff', 'Search teachers…', staffQuery) + searchNote(active, shownCount, STAFF_LIST.length) +
     // --- Add teacher form (all details) ---
     `<div class="ttcard frm"><b style="font-size:18px">Add a new teacher</b>` +
       `<label for="tnm">Full name</label><input id="tnm" placeholder="e.g. Dr. S. Mohapatra">` +
@@ -1743,32 +1913,30 @@ function renderStaff() {
         `<div><label for="tjn">Joining date</label><input id="tjn" type="date" max="${todayIso()}" value="${todayIso()}"></div>` +
       `</div>` +
       `<label for="tsb">Subjects (optional)</label><input id="tsb" placeholder="e.g. Data Structures, Algorithms">` +
+      `<label for="tpw">Login password</label><input id="tpw" autocomplete="off" placeholder="At least 6 characters. Teacher signs in with Employee ID or email + this">` +
       `<div class="err" id="terr" role="alert"></div>` +
       `<button class="btn" id="tadd" type="button" style="width:100%">Add teacher</button></div>` +
     `<h3 style="margin:20px 0 8px">All staff</h3><div class="list">` +
     STAFF_LIST.map((x, i) => editingStaff === i
       // Edit mode
-      ? `<div class="item frm"><b>Edit staff member</b>` +
-          `<label for="esfn">Name</label><input id="esfn" value="${escapeHtml(x.name)}">` +
-          `<label for="esfd">Department</label><input id="esfd" value="${escapeHtml(x.dept)}">` +
-          `<div class="err" id="esferr" role="alert"></div>` +
-          `<div class="btns" style="margin-top:10px"><button class="btn sm" data-act="stsave:${i}" type="button">Save</button><button class="btn ghost sm" data-act="stcancel" type="button">Cancel</button></div></div>`
+      ? staffEditForm(x, i, rowClass(x), rowAttrs(x))
       // Normal view
-      : `<div class="item"><div class="top"><b>${escapeHtml(x.name)}</b><span class="badge ok">${x.pos}</span></div>` +
+      : `<div class="item${rowClass(x)}" ${rowAttrs(x)}><div class="top"><button class="pwho" data-vp="t:${escapeHtml(x.id)}" type="button" title="Open profile"><span class="avatar sm">${avatarInner(x.photo, x.name)}</span><b>${escapeHtml(x.name)}</b></button><span class="badge ok">${x.pos}</span></div>` +
           `<p>${escapeHtml(x.id)} · ${escapeHtml(x.dept)}</p>` +
           (x.email ? `<p>${escapeHtml(x.email)}${x.phone ? ' · ' + escapeHtml(x.phone) : ''}</p>` : '') +
-          (x.joined ? `<p>Joined ${new Date(x.joined + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${x.subjects ? ' · ' + escapeHtml(x.subjects) : ''}</p>` : '') +
+          (x.joined ? `<p>Joined ${longDate(x.joined)}${x.subjects ? ' · ' + escapeHtml(x.subjects) : ''}</p>` : '') +
           `<label for="pos${i}" style="display:block;margin:10px 0 4px;font-size:13px;color:var(--muted)">Position</label>` +
           `<select id="pos${i}" data-pos="${i}">${POSITIONS.map(p => `<option ${p === x.pos ? 'selected' : ''}>${p}</option>`).join('')}</select>` +
           `<div class="btns" style="margin-top:10px">` +
+            `<button class="btn ghost sm" data-act="tprof:${i}" type="button">Edit profile</button>` +
             `<button class="btn ghost sm" data-act="sted:${i}" type="button">Edit</button>` +
             `<button class="btn ghost sm" data-trm="${i}" type="button">${removeStaffConfirm === x.id ? 'Tap again to confirm' : 'Remove'}</button>` +
           `</div></div>`
-    ).join('') + '</div>';
+    ).join('') + searchNone(active, shownCount, STAFF_LIST.length) + '</div>';
 }
 
 // Add a new teacher (admin only) with validation of every detail
-function addTeacher() {
+async function addTeacher() {
   if (getRole() !== 'admin') return;   // safety: only admin can add teachers
   const name = $('tnm').value.trim();
   const id = $('tid').value.trim().toUpperCase();
@@ -1787,6 +1955,13 @@ function addTeacher() {
   if (!/^(\+91)?[6-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) { errBox.textContent = 'Enter a valid 10-digit mobile number.'; return; }
   if (!joined || joined > todayIso()) { errBox.textContent = 'Choose a joining date that is not in the future.'; return; }
 
+  const password = $('tpw').value;
+  if (password.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+  try {   // create the login account on the server first
+    $('tadd').disabled = true;
+    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: id, name, role: 'staff', password, email }) });
+  } catch (e) { $('tadd').disabled = false; errBox.textContent = e.message; return; }
+
   STAFF_LIST.push({ id, name, dept, pos: $('tps').value, email, phone, joined, subjects: $('tsb').value.trim() });
   saveJson('cc_staff', STAFF_LIST);
   staffMessage = '✅ ' + escapeHtml(name) + ' (' + id + ') added as ' + $('tps').value + '.';
@@ -1801,6 +1976,7 @@ function removeTeacher(i) {
   if (removeStaffConfirm === x.id) {
     STAFF_LIST.splice(i, 1);
     saveJson('cc_staff', STAFF_LIST);
+    API.request('/api/users/' + encodeURIComponent(x.id), { method: 'DELETE' }).catch(() => {});
     removeStaffConfirm = '';
     editingStaff = -1;
     staffMessage = escapeHtml(x.name) + ' was removed.';
@@ -1821,6 +1997,110 @@ function setPosition(i, value) {
   render();
 }
 
+
+
+/* ----- Accounts page (admin only) ------------------------------------------
+   Admin creates logins for admins, teachers and students, sets / changes
+   passwords and removes accounts. Everything is stored on the server.
+   People sign in with their roll number / employee ID OR their email.
+   ----------------------------------------------------------------------- */
+let accountsList = null, accountsLoading = false, accountsMessage = '', accountsError = '';
+let pwEditing = '', accRemoveConfirm = '';
+const ACCOUNT_ROLE_LABEL = { student: 'Student', staff: 'Teacher', admin: 'Admin' };
+const looksLikeEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+async function loadAccounts() {
+  if (accountsLoading) return;
+  accountsLoading = true;
+  try { accountsList = await API.request('/api/users'); }
+  catch (e) { accountsList = []; accountsError = e.message; }
+  accountsLoading = false;
+  render();
+}
+
+function renderAccounts() {
+  if (getRole() !== 'admin' || appData.tab !== 'accounts') return '';
+  if (accountsList === null) {
+    loadAccounts();
+    return '<h2>Login accounts</h2><p class="sub">Loading…</p>';
+  }
+  const message = accountsMessage, error = accountsError;
+  accountsMessage = ''; accountsError = '';
+  const who = u => escapeHtml(u.login_id);
+
+  return `<h2>Login accounts</h2><p class="sub">${accountsList.length} accounts · only the admin can create accounts and set or change passwords</p>` +
+    successBox(message) + (error ? `<div class="err" role="alert">${escapeHtml(error)}</div>` : '') +
+    `<div class="ttcard frm"><b style="font-size:18px">Add a login account</b>` +
+      `<label for="acrole">Account type</label><select id="acrole"><option value="student">Student</option><option value="staff">Teacher / Staff</option><option value="admin">Admin</option></select>` +
+      `<label for="acname">Full name</label><input id="acname" placeholder="Full name">` +
+      `<label for="acid">Roll number / Employee ID</label><input id="acid" placeholder="Student roll no. or teacher employee ID (not needed for admin)">` +
+      `<label for="acem">Email</label><input id="acem" type="email" placeholder="name@gmail.com (required for admin, optional for others)">` +
+      `<label for="acpw">Password</label><input id="acpw" autocomplete="off" placeholder="At least 6 characters. You give this to the person">` +
+      `<div class="err" id="acerr" role="alert"></div>` +
+      `<button class="btn" id="accadd" type="button" style="width:100%">Create account</button></div>` +
+    `<h3 style="margin:20px 0 8px">All accounts</h3><div class="list">` +
+    accountsList.map(u =>
+      `<div class="item"><div class="top"><b>${escapeHtml(u.name)}${u.me ? ' (you)' : ''}</b><span class="badge ${u.role === 'admin' ? 'ok' : ''}">${ACCOUNT_ROLE_LABEL[u.role] || u.role}</span></div>` +
+      `<p>Login ID: ${who(u)}${u.email && u.email !== u.login_id ? ' · ' + escapeHtml(u.email) : ''}</p>` +
+      (pwEditing === u.login_id
+        ? `<div class="frm"><label for="acnewpw">New password</label><input id="acnewpw" autocomplete="off" placeholder="At least 6 characters">` +
+          `<div class="err" id="acpwerr" role="alert"></div>` +
+          `<div class="btns" style="margin-top:10px"><button class="btn sm" data-acc="pwsave" data-who="${who(u)}" type="button">Save password</button>` +
+          `<button class="btn ghost sm" data-acc="pwcancel" type="button">Cancel</button></div></div>`
+        : `<div class="btns" style="margin-top:10px"><button class="btn ghost sm" data-acc="pw" data-who="${who(u)}" type="button">Set password</button>` +
+          (u.me ? '' : `<button class="btn ghost sm" data-acc="rm" data-who="${who(u)}" type="button">${accRemoveConfirm === u.login_id ? 'Tap again to confirm' : 'Remove'}</button>`) +
+          `</div>`) +
+      `</div>`
+    ).join('') + '</div>';
+}
+
+async function addAccount() {
+  const role = $('acrole').value, name = $('acname').value.trim();
+  let loginId = $('acid').value.trim();
+  const email = $('acem').value.trim(), password = $('acpw').value, errBox = $('acerr');
+
+  if (name.length < 2) { errBox.textContent = 'Enter the full name.'; return; }
+  if (role === 'admin') {
+    if (!looksLikeEmail(email)) { errBox.textContent = 'An admin needs a valid email. It becomes the login ID.'; return; }
+    loginId = email;
+  } else {
+    if (!/^[A-Za-z0-9._-]{3,}$/.test(loginId)) { errBox.textContent = 'Enter the roll number / employee ID (letters, numbers, dashes).'; return; }
+    if (email && !looksLikeEmail(email)) { errBox.textContent = 'Enter a valid email or leave it empty.'; return; }
+  }
+  if (password.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+
+  $('accadd').disabled = true;
+  try {
+    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: loginId, name, role, password, email }) });
+  } catch (e) { $('accadd').disabled = false; errBox.textContent = e.message; return; }
+  accountsMessage = '✅ ' + escapeHtml(ACCOUNT_ROLE_LABEL[role]) + ' account created for ' + escapeHtml(name) + '. Login ID: ' + escapeHtml(loginId.toLowerCase());
+  accountsList = null;
+  render();
+}
+
+async function accountAction(btn) {
+  const act = btn.dataset.acc, who = btn.dataset.who;
+  if (act === 'pw') { pwEditing = who; accRemoveConfirm = ''; render(); const f = $('acnewpw'); if (f) f.focus(); }
+  else if (act === 'pwcancel') { pwEditing = ''; render(); }
+  else if (act === 'pwsave') {
+    const pw = $('acnewpw').value, errBox = $('acpwerr');
+    if (pw.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+    try { await API.request('/api/users/reset-password', { method: 'POST', body: JSON.stringify({ login_id: who, password: pw }) }); }
+    catch (e) { errBox.textContent = e.message; return; }
+    pwEditing = '';
+    accountsMessage = '✅ Password changed for ' + escapeHtml(who) + '.';
+    render();
+  }
+  else if (act === 'rm') {
+    if (accRemoveConfirm !== who) { accRemoveConfirm = who; pwEditing = ''; render(); return; }
+    accRemoveConfirm = '';
+    try { await API.request('/api/users/' + encodeURIComponent(who), { method: 'DELETE' }); }
+    catch (e) { accountsError = e.message; render(); return; }
+    accountsMessage = 'Account ' + escapeHtml(who) + ' was removed.';
+    accountsList = null;
+    render();
+  }
+}
 
 /* ----- Achievements -------------------------------------------------------- */
 
@@ -1871,7 +2151,7 @@ function submitAchievement() {
   if (link && !isValidUrl(link)) { errBox.textContent = 'The proof link must start with http:// or https://'; return; }
 
   ACHIEVEMENTS.unshift({
-    id: Date.now(), who: userName(), roll: 'CS23-0142', title,
+    id: Date.now(), who: accountName() || userName(), roll: userName().toUpperCase(), title,
     cat: $('acat').value, date: $('adt').value || todayIso(),
     desc: $('ads').value.trim(), link, st: 'Pending', mine: true
   });
@@ -2008,6 +2288,7 @@ function renderAdminHome() {
   const pendingStaffLeave = leaveRequests.staff.filter(r => r.id && r.s === 'Pending').length;
 
   return `<h2>${greetingHtml()}, ${displayName()} 👋</h2><p class="sub">Admin dashboard</p>` +
+    searchBox('a', 'sq-home', 'Search students or teachers…', '') +
     `<div class="grid">` +
       `<button class="stat" data-go="students"><span>Students</span><b>${STUDENTS.length}</b><span>Add, remove, assign CR</span></button>` +
       `<button class="stat" data-go="staff"><span>Staff members</span><b>${STAFF_LIST.length}</b><span>Assign positions</span></button>` +
@@ -2020,19 +2301,556 @@ function renderAdminHome() {
     renderIssueList();
 }
 
+// ----- Admin profile: photo, details and editing -----
+let editingProfile = false;        // true while the edit form is open
+let profilePhotoDraft = null;      // null = photo unchanged, '' = photo removed, 'data:image…' = new photo
+let adminProfileMessage = '';      // "Profile updated" note shown once
+
+// Photo (only accept images we created ourselves) or the first letter of the name
+function avatarInner(photo, who) {
+  return photo && photo.startsWith('data:image/')
+    ? `<img src="${escapeHtml(photo)}" alt="Profile photo">`
+    : (who ? escapeHtml(String(who).trim()[0] || '?').toUpperCase() : displayName()[0].toUpperCase());
+}
+const currentProfilePhoto = () => profilePhotoDraft !== null ? profilePhotoDraft : adminProfile().photo;
+
 // Admin profile page
 function renderAdminProfile() {
-  return `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
-    `<div class="item" style="display:flex;gap:16px;align-items:center;margin-bottom:14px">` +
-      `<div class="avatar">${displayName()[0].toUpperCase()}</div>` +
-      `<div><b style="font-size:20px">${displayName()}</b><p>Administrator</p></div></div>` +
-    `<div class="kv">` +
-      `<div><small>Admin ID</small>ADM-001</div>` +
-      `<div><small>Email</small>admin@college.example</div>` +
-      `<div><small>Can do</small>Manage students, assign staff positions, handle complaints, verify achievements</div>` +
+  const p = adminProfile();
+  const message = adminProfileMessage; adminProfileMessage = '';
+  const head = `<h2>Profile</h2><p class="sub">&nbsp;</p>` + (message ? `<div class="note" style="margin-bottom:12px">${message}</div>` : '');
+  const themeButton = `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>`;
+
+  // ----- Edit form -----
+  if (editingProfile) {
+    const field = (id, label, value, extra) =>
+      `<div><label for="${id}">${label}</label><input id="${id}" value="${escapeHtml(value)}" ${extra || ''}></div>`;
+    return head +
+      `<div class="ttcard frm pedit">` +
+        `<div class="pphoto"><div class="avatar big" id="pavprev">${avatarInner(currentProfilePhoto())}</div>` +
+        `<div class="pphoto-side"><div class="btns">` +
+          `<label class="btn ghost sm filebtn"><span>Choose photo</span><input id="pphoto" type="file" accept="image/*"></label>` +
+          `<button class="btn ghost sm" data-act="prrm" type="button">Remove photo</button></div>` +
+        `<p class="demo" style="margin-top:8px">JPG or PNG. The photo is cropped to a square and saved on this device.</p></div></div>` +
+        `<label for="pfn">Full name</label><input id="pfn" maxlength="40" value="${escapeHtml(p.name || accountName() || userName())}">` +
+        `<label for="pft">Designation</label><input id="pft" maxlength="40" value="${escapeHtml(p.title)}">` +
+        `<div class="two">` +
+          field('pfe', 'Email', p.email, 'type="email" maxlength="60"') +
+          field('pfp', 'Phone', p.phone, 'type="tel" maxlength="20"') +
+        `</div><div class="two">` +
+          field('pfd', 'Department', p.department, 'maxlength="50"') +
+          field('pfo', 'Office', p.office, 'maxlength="50"') +
+        `</div><div class="two">` +
+          field('pfj', 'Joined', p.joined, 'maxlength="30"') +
+          field('pfm', 'Emergency contact', p.emergency, 'maxlength="60" placeholder="Name · phone"') +
+        `</div>` +
+        `<label for="pfa">About</label><textarea id="pfa" maxlength="200" placeholder="A short line about your role">${escapeHtml(p.about)}</textarea>` +
+        `<p class="demo">Admin ID (${escapeHtml(p.adminId)}) cannot be changed.</p>` +
+        `<div class="err" id="pferr" role="alert"></div>` +
+        `<div class="btns"><button class="btn sm" data-act="psave" type="button">Save changes</button>` +
+        `<button class="btn ghost sm" data-act="pcancel" type="button">Cancel</button></div>` +
+      `</div>`;
+  }
+
+  // ----- Normal view -----
+  const show = v => v ? escapeHtml(v) : '—';
+  return head +
+    `<div class="item pcard">` +
+      `<div class="avatar big">${avatarInner(p.photo)}</div>` +
+      `<div class="pinfo"><b class="pname">${displayName()}</b><p>${escapeHtml(p.title)} · ${escapeHtml(p.department)}</p>` +
+      (p.about ? `<p class="pabout">${escapeHtml(p.about)}</p>` : '') + `</div>` +
+      `<button class="btn ghost sm" data-act="pedit" type="button">Edit profile</button>` +
     `</div>` +
-    `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>` +
-    `<p class="demo">All details shown are demo data.</p>`;
+    `<div class="kv">` +
+      `<div><small>Admin ID</small>${show(p.adminId)}</div>` +
+      `<div><small>Email</small>${show(p.email)}</div>` +
+      `<div><small>Phone</small>${show(p.phone)}</div>` +
+      `<div><small>Department</small>${show(p.department)}</div>` +
+      `<div><small>Office</small>${show(p.office)}</div>` +
+      `<div><small>Joined</small>${show(p.joined)}</div>` +
+      `<div><small>Emergency contact</small>${show(p.emergency)}</div>` +
+      `<div><small>Can do</small>Manage students, assign staff positions, handle complaints, verify achievements</div>` +
+    `</div>` + themeButton +
+    `<p class="demo">Your profile is saved on this device only.</p>`;
+}
+
+// Redraw the photo circle in the edit form without re-rendering the page (keeps typed text)
+function showProfilePreview() {
+  const box = $('pavprev');
+  if (box) box.innerHTML = avatarInner(currentProfilePhoto());
+}
+
+// Crop a chosen image to a centred 256 px square JPEG (data URL) so it fits in storage.
+// Calls done(dataUrl) on success or fail(message) on a bad file.
+function cropPhoto(file, done, fail) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { fail('Please choose an image file (JPG or PNG).'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 256, side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      done(canvas.toDataURL('image/jpeg', .85));
+    };
+    img.onerror = () => fail('That image could not be read. Please try another file.');
+    img.src = reader.result;
+  };
+  reader.onerror = () => fail('That file could not be read. Please try again.');
+  reader.readAsDataURL(file);
+}
+
+// Admin's own photo picker
+function handleProfilePhoto(input) {
+  const errBox = $('pferr');
+  cropPhoto(input.files && input.files[0],
+    url => { profilePhotoDraft = url; errBox.textContent = ''; showProfilePreview(); },
+    msg => { errBox.textContent = msg; input.value = ''; });
+}
+
+// Validate and save the edited admin profile
+function saveAdminProfile() {
+  const val = id => $(id).value.trim(), errBox = $('pferr');
+  const name = val('pfn'), email = val('pfe'), phone = val('pfp');
+  if (name.length < 2) { errBox.textContent = 'Enter your full name (at least 2 letters).'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errBox.textContent = 'Enter a valid email address.'; return; }
+  if (phone && !/^\+?[\d\s-]{7,18}$/.test(phone)) { errBox.textContent = 'Enter a valid phone number (digits, spaces and dashes only).'; return; }
+
+  const next = Object.assign(adminProfile(), {
+    name, email, phone,
+    title: val('pft') || 'Administrator',
+    department: val('pfd'), office: val('pfo'), joined: val('pfj'),
+    emergency: val('pfm'), about: val('pfa')
+  });
+  if (profilePhotoDraft !== null) next.photo = profilePhotoDraft;
+
+  try { localStorage.setItem('cc_admin_prof', JSON.stringify(next)); }
+  catch (e) { errBox.textContent = 'Could not save: browser storage is full or blocked. Try a different photo.'; return; }
+
+  editingProfile = false;
+  profilePhotoDraft = null;
+  adminProfileMessage = '✅ Profile updated.';
+  render();
+  window.scrollTo(0, 0);
+}
+
+
+// ----- Admin: edit the profile (photo + details) of a student or a staff member -----
+// Name, roll number and class are still changed with the existing "Edit" button.
+let personEdit = null;   // { kind: 's' | 't', i: list index, photo: null (unchanged) | '' (removed) | data URL }
+const personList = kind => kind === 's' ? STUDENTS : STAFF_LIST;
+const longDate = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// The record of the person who is signed in (matched by roll number / employee ID or email name)
+function myStudent() {
+  if (getRole() !== 'student') return null;
+  const u = userName().toUpperCase();
+  return STUDENTS.find(x => x.roll === u) || null;
+}
+function myStaff() {
+  if (getRole() !== 'staff') return null;
+  const u = userName().toLowerCase();
+  return STAFF_LIST.find(x => x.id.toLowerCase() === u || (x.email && x.email.split('@')[0].toLowerCase() === u)) || null;
+}
+
+function openPersonProfile(kind, i) {
+  if (getRole() !== 'admin') return;
+  const x = personList(kind)[i];
+  if (!x) return;
+  personEdit = { kind, i, photo: null };
+  const isS = kind === 's';
+  const input = (id, label, value, extra) =>
+    `<div><label for="${id}">${label}</label><input id="${id}" value="${escapeHtml(value || '')}" ${extra || ''}></div>`;
+
+  $('sbody').innerHTML =
+    `<h2>${isS ? 'Student' : 'Staff'} profile</h2>` +
+    `<p class="sub" style="margin:0 0 8px">${escapeHtml(x.name)} · ${escapeHtml(isS ? x.roll : x.id)}</p>` +
+    `<div class="frm pedit">` +
+      `<div class="pphoto"><div class="avatar big" id="pzprev">${avatarInner(x.photo, x.name)}</div>` +
+      `<div class="pphoto-side"><div class="btns">` +
+        `<label class="btn ghost sm filebtn"><span>Choose photo</span><input id="pzphoto" type="file" accept="image/*"></label>` +
+        `<button class="btn ghost sm" data-act="pzrm" type="button">Remove photo</button></div></div></div>` +
+      `<div class="two">${input('pzem', 'Email', x.email, 'type="email" maxlength="60"')}${input('pzph', 'Phone', x.phone, 'type="tel" maxlength="20"')}</div>` +
+      (isS
+        ? `<div class="two">${input('pzmn', 'Mentor', x.mentor, 'maxlength="50"')}${input('pzho', 'Hostel / room', x.hostel, 'maxlength="50"')}</div>` +
+          `<div class="two">${input('pzgd', 'Guardian (name · phone)', x.guardian, 'maxlength="70"')}${input('pzbl', 'Blood group', x.blood, 'maxlength="5"')}</div>` +
+          `<label for="pzad">Address</label><textarea id="pzad" maxlength="160">${escapeHtml(x.address || '')}</textarea>`
+        : `<div class="two">${input('pzjn', 'Joining date', x.joined, `type="date" max="${todayIso()}"`)}${input('pzcb', 'Cabin', x.cabin, 'maxlength="50"')}</div>` +
+          `<label for="pzql">Qualification</label><input id="pzql" maxlength="60" value="${escapeHtml(x.qualification || '')}">` +
+          `<label for="pzsb">Subjects</label><input id="pzsb" maxlength="80" value="${escapeHtml(x.subjects || '')}">`) +
+      `<div class="err" id="pzerr" role="alert"></div>` +
+      `<div class="btns"><button class="btn sm" data-act="pesave" type="button">Save changes</button>` +
+      `<button class="btn ghost sm" data-close type="button">Cancel</button></div>` +
+    `</div>`;
+  $('sheet').classList.remove('hidden');
+  translatePage($('sheet'));
+}
+
+function handlePersonPhoto(input) {
+  if (!personEdit) return;
+  cropPhoto(input.files && input.files[0],
+    url => { personEdit.photo = url; $('pzerr').textContent = ''; showPersonPreview(); },
+    msg => { $('pzerr').textContent = msg; input.value = ''; });
+}
+
+function showPersonPreview() {
+  if (!personEdit) return;
+  const x = personList(personEdit.kind)[personEdit.i];
+  const photo = personEdit.photo !== null ? personEdit.photo : x.photo;
+  $('pzprev').innerHTML = avatarInner(photo, x.name);
+}
+
+function savePersonProfile() {
+  if (getRole() !== 'admin' || !personEdit) return;
+  const { kind, i } = personEdit, list = personList(kind), x = list[i], errBox = $('pzerr');
+  if (!x) return;
+  const val = id => $(id).value.trim();
+  const email = val('pzem'), phone = val('pzph');
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errBox.textContent = 'Enter a valid email address.'; return; }
+  if (email && kind === 't' && STAFF_LIST.some((o, k) => k !== i && o.email && o.email.toLowerCase() === email.toLowerCase())) {
+    errBox.textContent = 'This email is already used by another staff member.'; return;
+  }
+  if (phone && !/^(\+91)?[6-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) { errBox.textContent = 'Enter a valid 10-digit mobile number.'; return; }
+
+  const fields = kind === 's'
+    ? { email, phone, mentor: val('pzmn'), hostel: val('pzho'), guardian: val('pzgd'), blood: val('pzbl'), address: val('pzad') }
+    : { email, phone, joined: val('pzjn'), cabin: val('pzcb'), qualification: val('pzql'), subjects: val('pzsb') };
+  if (kind === 't' && fields.joined && fields.joined > todayIso()) { errBox.textContent = 'The joining date cannot be in the future.'; return; }
+
+  const before = Object.assign({}, x);
+  Object.assign(x, fields);
+  if (personEdit.photo !== null) { if (personEdit.photo) x.photo = personEdit.photo; else delete x.photo; }
+
+  try { localStorage.setItem(kind === 's' ? 'cc_stud' : 'cc_staff', JSON.stringify(list)); }
+  catch (e) {
+    Object.keys(x).forEach(k => delete x[k]); Object.assign(x, before);   // undo: nothing was saved
+    errBox.textContent = 'Could not save: browser storage is full or blocked. Try a smaller photo.';
+    return;
+  }
+
+  const message = '✅ Profile of ' + escapeHtml(x.name) + ' updated.';
+  if (kind === 's') studentMessage = message; else staffMessage = message;
+  personEdit = null;
+  closeSheet();
+  render();
+}
+
+
+/* =============================================================================
+   18b. SEARCH WITH SUGGESTIONS (students + teachers)
+   -----------------------------------------------------------------------------
+   * Every search box has a Department list and (for students) Year tabs above it.
+   * Dashboards: admin finds students AND teachers, teachers find students.
+   * Students page (admin + teachers) and Staff page (admin): the box filters the
+     list while typing.
+   * Tapping a suggestion (or a name in a list) opens that person's profile.
+   Typing never re-renders the page, so the cursor and keyboard stay put.
+   ============================================================================= */
+
+let studentQuery = '';      // text in the Students page search box
+let staffQuery = '';        // text in the Staff page search box
+let viewPerson = null;      // { kind: 's' | 't', key: roll / employee ID } = profile being viewed
+let pendingView = null;     // profile to open right after the next page change
+const sgItems = {};         // suggestion lists currently shown, by search box id
+
+// Department / Year choices for each search box
+const searchFilters = {
+  'sq-home': { dept: 'All', year: 'All' },
+  'sq-stud': { dept: 'All', year: 'All' },
+  'sq-staff': { dept: 'All', year: 'All' }
+};
+const filtersOn = id => searchFilters[id].dept !== 'All' || searchFilters[id].year !== 'All';
+const searchActive = (id, q) => !!q.trim() || filtersOn(id);
+
+const norm = v => String(v == null ? '' : v).toLowerCase();
+const queryTokens = q => norm(q).trim().split(/\s+/).filter(Boolean);
+
+// Every word typed must appear somewhere in the person's details.
+// "year 3" is treated as one word so it only matches Year 3 (not the digit 3 in a roll number).
+const matchTokens = q => queryTokens(norm(q).replace(/\byear\s*(\d)/g, 'year$1'));
+const matchesQuery = (q, hay) => { const h = norm(hay); return matchTokens(q).every(t => h.includes(t)); };
+
+// Searchable text of one student / one staff member
+const studentHay = x => [x.name, x.roll, x.course, studentDept(x), 'year' + x.year, 'year ' + x.year, x.batch, x.cr ? 'cr class representative' : '', x.email, x.phone].join(' ');
+const staffHay = x => [x.name, x.id, staffDept(x), x.pos, x.email, x.phone, x.subjects, x.cabin].join(' ');
+
+// Does this person fit the typed text AND the Department / Year choices?
+function personMatches(kind, p, q, f) {
+  if (!matchesQuery(q, kind === 's' ? studentHay(p) : staffHay(p))) return false;
+  if (f.dept !== 'All' && (kind === 's' ? studentDept(p) : staffDept(p)) !== f.dept) return false;
+  if (kind === 's' && f.year !== 'All' && String(p.year) !== f.year) return false;
+  return true;
+}
+
+// Departments that exist in the data (for the Department list)
+function deptOptions(kind) {
+  const set = new Set();
+  if (kind !== 't') STUDENTS.forEach(x => set.add(studentDept(x)));
+  if (kind !== 's') STAFF_LIST.forEach(x => set.add(staffDept(x)));
+  set.delete('');
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// Wrap the typed words in <mark> (the text itself is escaped first)
+function highlight(text, q) {
+  const toks = queryTokens(q).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!toks.length) return escapeHtml(text);
+  return String(text).split(new RegExp('(' + toks.join('|') + ')', 'ig'))
+    .map((part, i) => i % 2 ? '<mark>' + escapeHtml(part) + '</mark>' : escapeHtml(part)).join('');
+}
+
+// People matching the query, best matches first (name starts with it, then ID, then any word)
+function rankPeople(list, q, hayFn, nameFn, idFn) {
+  const first = queryTokens(q)[0] || '', whole = norm(q).trim();
+  return list.map((p, i) => {
+    if (!matchesQuery(q, hayFn(p))) return null;
+    const name = norm(nameFn(p)), id = norm(idFn(p));
+    const score = name.startsWith(whole) ? 0 : id.startsWith(whole) ? 1 : name.split(/\s+/).some(w => w.startsWith(first)) ? 2 : 3;
+    return { p, i, score };
+  }).filter(Boolean).sort((a, b) => a.score - b.score || a.i - b.i).map(r => r.p);
+}
+
+// Ready-made ideas shown when the box is empty
+function trySuggestions(kind) {
+  const uniq = arr => [...new Set(arr.filter(Boolean))];
+  const stud = () => ['CR', 'Year 3'].concat(uniq(STUDENTS.map(x => studentDept(x))).slice(0, 3));
+  const staff = () => ['HOD', 'Warden', 'Placement Officer'];
+  const terms = kind === 's' ? stud() : kind === 't' ? staff() : stud().slice(0, 3).concat(['HOD', 'Warden']);
+  return uniq(terms).slice(0, 6).map(t => ({ type: 'term', title: t, value: t }));
+}
+
+// Suggestions for a box: kind 's' students, 't' teachers, 'a' both.
+// With nothing typed they are the "try" ideas, or (if a Department / Year is chosen) the people in it.
+function searchSuggestions(kind, q, id) {
+  const f = searchFilters[id];
+  if (!q.trim() && !filtersOn(id)) return trySuggestions(kind);
+  const limit = kind === 'a' ? 5 : 8, out = [];
+  if (kind !== 't') {
+    const list = STUDENTS.filter(x => personMatches('s', x, '', f));
+    rankPeople(list, q, studentHay, x => x.name, x => x.roll).slice(0, limit)
+      .forEach(x => out.push({ type: 's', title: x.name, sub: x.roll + ' · ' + x.course + ' · Year ' + x.year, key: x.roll, photo: x.photo }));
+  }
+  if (kind !== 's') {
+    const list = STAFF_LIST.filter(x => personMatches('t', x, '', f));
+    rankPeople(list, q, staffHay, x => x.name, x => x.id).slice(0, limit)
+      .forEach(x => out.push({ type: 't', title: x.name, sub: x.id + ' · ' + staffDept(x) + ' · ' + x.pos, key: x.id, photo: x.photo }));
+  }
+  return out;
+}
+
+// The search box: Department list + Year tabs, then the input with its suggestion dropdown
+function searchBox(kind, id, placeholder, value) {
+  const f = searchFilters[id];
+  const filters =
+    `<div class="sfilt"><select class="sdept" data-sdept="${id}" aria-label="Department">` +
+      `<option value="All">All departments</option>` +
+      deptOptions(kind).map(d => `<option ${d === f.dept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('') +
+    `</select>` +
+    (kind !== 't'
+      ? `<div class="syears" role="group" aria-label="Year"${kind === 'a' ? ' title="Year applies to students"' : ''}>` +
+          ['All', '1', '2', '3', '4'].map(y => `<button class="chip ${f.year === y ? 'on' : ''}" data-syr="${id}:${y}" type="button">${y === 'All' ? 'All years' : 'Year ' + y}</button>`).join('') +
+        `</div>`
+      : '') +
+    `</div>`;
+  return `<div class="sbox" data-sk="${kind}" data-sid="${id}">${filters}<div class="swrap"><div class="sfield">` +
+    `<span class="sicon" aria-hidden="true">🔍</span>` +
+    `<input id="${id}" class="sinp" type="text" role="combobox" aria-expanded="false" aria-controls="${id}-list" aria-autocomplete="list" ` +
+      `autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="${placeholder}" placeholder="${placeholder}" value="${escapeHtml(value || '')}">` +
+    `<button class="sclr ${value ? '' : 'hidden'}" data-sclr="${id}" type="button" aria-label="Clear search">✕</button></div>` +
+    `<div class="sugg hidden" id="${id}-list" role="listbox"></div></div></div>`;
+}
+
+// "Showing 2 of 10" line and the "nothing found" message under a search box
+const searchNote = (active, shown, total) => `<p class="snote" aria-live="polite">${active ? 'Showing ' + shown + ' of ' + total : ''}</p>`;
+const searchNone = (active, shown, total) => `<p class="sub snone ${active && total && !shown ? '' : 'hidden'}">No one matches your search.</p>`;
+
+// Fill and open the dropdown
+function showSuggestions(box, q) {
+  const list = box.querySelector('.sugg'), inp = box.querySelector('.sinp'), id = box.dataset.sid;
+  const items = searchSuggestions(box.dataset.sk, q, id);
+  sgItems[id] = items;
+  let html = '', lastType = '';
+  items.forEach((it, n) => {
+    if (it.type !== lastType) {
+      lastType = it.type;
+      html += `<div class="sgh">${it.type === 's' ? 'Students' : it.type === 't' ? 'Teachers' : 'Try searching'}</div>`;
+    }
+    html += it.type === 'term'
+      ? `<button class="sgi term" role="option" id="${id}-o${n}" data-sg="${n}" type="button"><span aria-hidden="true">🔎</span><span class="sgt">${escapeHtml(it.title)}</span></button>`
+      : `<button class="sgi" role="option" id="${id}-o${n}" data-sg="${n}" type="button"><span class="avatar sm">${avatarInner(it.photo, it.title)}</span>` +
+        `<span><span class="sgt">${highlight(it.title, q)}</span><span class="sgs">${highlight(it.sub, q)}</span></span></button>`;
+  });
+  if (!items.length) html = `<div class="snomatch">No matches. Try a name, roll number, ID or department.</div>`;
+  list.innerHTML = html;
+  list.classList.remove('hidden');
+  inp.setAttribute('aria-expanded', 'true');
+  translatePage(list);
+}
+
+function hideSuggestions(box) {
+  if (!box) return;
+  const list = box.querySelector('.sugg'), inp = box.querySelector('.sinp');
+  list.classList.add('hidden');
+  inp.setAttribute('aria-expanded', 'false');
+  inp.removeAttribute('aria-activedescendant');
+}
+const closeAllSuggestions = except => document.querySelectorAll('.sbox').forEach(b => { if (b !== except) hideSuggestions(b); });
+
+// Hide / show the rows of the Students or Staff page to match the text + Department / Year
+function filterRows(which) {
+  const root = $(which === 'stud' ? 'pg-students' : 'pg-staff');
+  const id = which === 'stud' ? 'sq-stud' : 'sq-staff';
+  const q = which === 'stud' ? studentQuery : staffQuery, f = searchFilters[id];
+  if (!root) return;
+  let shown = 0, total = 0;
+  root.querySelectorAll('.list .item[data-q]').forEach(el => {
+    total++;
+    const ok = matchesQuery(q, el.dataset.q) &&
+      (f.dept === 'All' || el.dataset.dept === f.dept) &&
+      (f.year === 'All' || which !== 'stud' || el.dataset.year === f.year);
+    el.classList.toggle('shide', !ok);
+    if (ok) shown++;
+  });
+  const active = searchActive(id, q);
+  const note = root.querySelector('.snote'), none = root.querySelector('.snone');
+  if (note) note.textContent = active ? 'Showing ' + shown + ' of ' + total : '';
+  if (none) none.classList.toggle('hidden', !(active && total && !shown));
+}
+
+// Typing in any search box
+function onSearchInput(inp) {
+  const box = inp.closest('.sbox'), q = inp.value;
+  box.querySelector('.sclr').classList.toggle('hidden', !q);
+  if (inp.id === 'sq-stud') { studentQuery = q; filterRows('stud'); }
+  else if (inp.id === 'sq-staff') { staffQuery = q; filterRows('staff'); }
+  closeAllSuggestions(box);
+  showSuggestions(box, q);
+}
+
+// Set the text of a page search box (used by "try" ideas and the ✕ button)
+function setSearchText(box, text) {
+  const inp = box.querySelector('.sinp');
+  inp.value = text;
+  box.querySelector('.sclr').classList.toggle('hidden', !text);
+  if (inp.id === 'sq-stud') { studentQuery = text; filterRows('stud'); }
+  else if (inp.id === 'sq-staff') { staffQuery = text; filterRows('staff'); }
+}
+
+// A Department or Year choice changed
+function setSearchFilter(id, key, val) {
+  searchFilters[id][key] = val;
+  const box = document.querySelector('.sbox[data-sid="' + id + '"]');
+  if (!box) return;
+  box.querySelectorAll('[data-syr]').forEach(b => b.classList.toggle('on', b.dataset.syr === id + ':' + searchFilters[id].year));
+  if (id === 'sq-stud') filterRows('stud'); else if (id === 'sq-staff') filterRows('staff');
+  const open = !box.querySelector('.sugg').classList.contains('hidden');
+  if (open || id === 'sq-home') showSuggestions(box, box.querySelector('.sinp').value);
+}
+
+// Open a person's profile page
+function openPersonView(kind, key) {
+  closeAllSuggestions();
+  pushNav(navState());           // so Back returns to the list / page we were on
+  viewPerson = { kind, key };
+  render();
+  updateBack();
+  window.scrollTo(0, 0);
+}
+
+// A suggestion was chosen
+function pickSuggestion(box, it) {
+  if (!it) return;
+  if (it.type === 'term') {                        // an idea like "CR" or "Year 3": use it as the search text
+    const inp = box.querySelector('.sinp');
+    setSearchText(box, it.value);
+    showSuggestions(box, it.value);
+    inp.focus();
+    return;
+  }
+  if (box.dataset.sid === 'sq-home') {             // dashboard: go to that person's profile
+    hideSuggestions(box);
+    pendingView = { kind: it.type, key: it.key };
+    goToTab(it.type === 's' ? 'students' : 'staff');
+    window.scrollTo(0, 0);
+    return;
+  }
+  openPersonView(it.type, it.key);                 // list page: open the profile right here
+}
+
+// Keyboard: ↑ ↓ move through the suggestions, Enter picks, Esc closes
+document.addEventListener('keydown', e => {
+  const inp = e.target;
+  if (!inp.classList || !inp.classList.contains('sinp')) return;
+  const box = inp.closest('.sbox'), list = box.querySelector('.sugg'), id = box.dataset.sid;
+  const opts = [...list.querySelectorAll('.sgi')];
+  const cur = opts.findIndex(o => o.classList.contains('act'));
+  const mark = n => {
+    opts.forEach((o, k) => o.classList.toggle('act', k === n));
+    if (opts[n]) { inp.setAttribute('aria-activedescendant', opts[n].id); opts[n].scrollIntoView({ block: 'nearest' }); }
+  };
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (list.classList.contains('hidden')) { showSuggestions(box, inp.value); return; }
+    if (!opts.length) return;
+    mark(e.key === 'ArrowDown' ? (cur + 1) % opts.length : (cur - 1 + opts.length) % opts.length);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const people = (sgItems[id] || []).findIndex(x => x.type !== 'term');
+    const n = cur >= 0 ? cur : (searchActive(id, inp.value) ? people : -1);   // Enter with no highlight = best match
+    if (n >= 0) pickSuggestion(box, sgItems[id][n]);
+  } else if (e.key === 'Escape') {
+    hideSuggestions(box);
+  }
+});
+
+// Opening the box (tap / focus) shows suggestions
+document.addEventListener('focusin', e => {
+  if (e.target.classList && e.target.classList.contains('sinp')) {
+    const box = e.target.closest('.sbox');
+    closeAllSuggestions(box);
+    showSuggestions(box, e.target.value);
+  }
+});
+
+// ----- A student's / teacher's profile page (opened from search or by tapping a name) -----
+// Edit opens the edit form right here on the profile page.
+function renderPersonView(kind, i, message) {
+  const isS = kind === 's', x = personList(kind)[i], role = getRole(), admin = role === 'admin';
+  const canEdit = admin || (isS && role === 'staff');                  // same rule as the lists
+  const editing = isS ? editingStudent === i : editingStaff === i;
+  const show = v => v ? escapeHtml(v) : '—';
+  const details = isS
+    ? [['Roll number', x.roll], ['Department', studentDept(x)], ['Course', x.course], ['Year', 'Year ' + x.year], ['Batch', x.batch],
+       ['Email', x.email], ['Phone', x.phone], ['Mentor', x.mentor], ['Hostel', x.hostel], ['Guardian', x.guardian],
+       ['Blood group', x.blood], ['Address', x.address]]
+    : [['Employee ID', x.id], ['Department', staffDept(x)], ['Position', x.pos], ['Email', x.email], ['Phone', x.phone],
+       ['Joined', x.joined ? longDate(x.joined) : ''], ['Cabin', x.cabin], ['Subjects', x.subjects], ['Qualification', x.qualification]];
+  const subtitle = isS ? escapeHtml(x.course) + ' · Year ' + x.year + ' · Batch ' + escapeHtml(x.batch) : escapeHtml(staffDept(x)) + ' · ' + escapeHtml(x.pos);
+  const buttons = editing ? '' :
+    `<div class="btns">` +
+      (admin ? `<button class="btn ghost sm" data-act="${isS ? 'sprof' : 'tprof'}:${i}" type="button">Edit profile</button>` : '') +
+      (canEdit ? `<button class="btn ghost sm" data-act="${isS ? 'sed' : 'sted'}:${i}" type="button">Edit</button>` : '') +
+    `</div>`;
+  return successBox(message) +
+    `<div class="item pcard"><div class="avatar big">${avatarInner(x.photo, x.name)}</div>` +
+      `<div class="pinfo"><b class="pname">${escapeHtml(x.name)}</b><p>${subtitle}</p>` +
+      (isS && x.cr ? `<span class="badge ok">CR</span>` : '') + (!isS ? `<span class="badge ok">${escapeHtml(x.pos)}</span>` : '') + `</div>` +
+      buttons +
+    `</div>` +
+    (editing
+      ? (isS ? studentEditForm(x, i, admin, ' pvform', '') : staffEditForm(x, i, ' pvform', ''))
+      : `<div class="kv">${details.map(d => `<div><small>${d[0]}</small>${show(d[1])}</div>`).join('')}</div>`);
+}
+
+// A roll number changed: keep the open profile page and the Back history pointing at the same student
+function renameViewKey(kind, oldKey, newKey) {
+  if (oldKey === newKey) return;
+  const fix = v => { if (v && v.kind === kind && v.key === oldKey) v.key = newKey; };
+  fix(viewPerson);
+  navStack.forEach(e => fix(e.view));
 }
 
 
@@ -2312,6 +3130,16 @@ const ACTIONS = {
   hcancel: () => { editingHoliday = -1; render(); },
   hsave: i => saveHoliday(+i),
 
+  pedit: () => { editingProfile = true; profilePhotoDraft = null; render(); },        // admin profile
+  pcancel: () => { editingProfile = false; profilePhotoDraft = null; render(); },
+  psave: () => saveAdminProfile(),
+  prrm: () => { profilePhotoDraft = ''; showProfilePreview(); },                       // remove photo
+
+  sprof: i => openPersonProfile('s', +i),                                              // admin: student profile
+  tprof: i => openPersonProfile('t', +i),                                              // admin: staff profile
+  pesave: () => savePersonProfile(),
+  pzrm: () => { if (personEdit) { personEdit.photo = ''; showPersonPreview(); } },
+
   back: i => stepComplaintBack(+i),
   clo: i => { closingComplaint = +i; render(); },
   cloc: () => { closingComplaint = -1; render(); },
@@ -2366,6 +3194,7 @@ function saveStudent(i) {
   if (course !== s.course || year !== s.year || batch !== s.batch) s.cr = false;
 
   Object.assign(s, { name, roll, course, year, batch });
+  renameViewKey('s', oldRoll, roll);        // keep an open profile page / Back history pointing at this student
   saveJson('cc_stud', STUDENTS);
   editingStudent = -1;
   studentMessage = '✅ ' + escapeHtml(name) + ' updated.';
@@ -2382,6 +3211,8 @@ function saveStaff(i) {
 
   x.name = name;
   x.dept = dept;
+  const posBox = $('esfp');
+  if (posBox && POSITIONS.includes(posBox.value)) x.pos = posBox.value;
   saveJson('cc_staff', STAFF_LIST);
   editingStaff = -1;
   staffMessage = '✅ ' + escapeHtml(name) + ' updated.';
@@ -2592,21 +3423,28 @@ function renderBasePages() {
     ).join('') + '</div>';
 
   // --- Student profile ---
-  $('pg-profile').innerHTML =
-    `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
-    `<div class="item" style="display:flex;gap:16px;align-items:center;margin-bottom:14px">` +
-      `<div class="avatar">${displayName()[0].toUpperCase()}</div>` +
-      `<div><b style="font-size:20px">${displayName()}</b><p>B.Tech · Computer Science · Semester 3</p></div></div>` +
+  $('pg-profile').innerHTML = renderStudentProfile();
+}
+
+// Student profile page (shows the admin-edited record when the signed-in roll number matches one)
+function renderStudentProfile() {
+  const r = myStudent();
+  const v = (key, demo) => escapeHtml(r ? (r[key] || '—') : demo);
+  return `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
+    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(r.photo, r.name) : avatarInner('')}</div>` +
+      `<div class="pinfo"><b class="pname">${r ? escapeHtml(r.name) : displayName()}</b>` +
+      `<p>${r ? escapeHtml(r.course + ' · Year ' + r.year) : 'B.Tech · Computer Science · Semester 3'}</p></div></div>` +
     `<div class="kv">` +
-      `<div><small>Roll number</small>CS23-0142</div>` +
-      `<div><small>Email</small>student@college.example</div>` +
-      `<div><small>Phone</small>+91 98765 43210</div>` +
-      `<div><small>Batch</small>2023 – 2027</div>` +
-      `<div><small>Mentor</small>Dr. A. Mishra</div>` +
-      `<div><small>Hostel</small>Block B, Room 214</div>` +
+      `<div><small>Roll number</small>${r ? escapeHtml(r.roll) : escapeHtml(userName().toUpperCase())}</div>` +
+      `<div><small>Email</small>${v('email', 'student@college.example')}</div>` +
+      `<div><small>Phone</small>${v('phone', '+91 98765 43210')}</div>` +
+      `<div><small>Batch</small>${r ? escapeHtml(r.batch) : '2023 – 2027'}</div>` +
+      `<div><small>Mentor</small>${v('mentor', 'Dr. A. Mishra')}</div>` +
+      `<div><small>Hostel</small>${v('hostel', 'Block B, Room 214')}</div>` +
+      (r ? `<div><small>Guardian</small>${v('guardian', '')}</div><div><small>Blood group</small>${v('blood', '')}</div><div><small>Address</small>${v('address', '')}</div>` : '') +
     `</div>` +
     `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>` +
-    `<p class="demo">All details shown are demo data.</p>` +
+    `<p class="demo">${r ? 'Your details are kept up to date by the admin office.' : 'All details shown are demo data.'}</p>` +
     `<p class="swipe-hint">Tip: swipe left or right anywhere on a page to switch menus.</p>`;
 }
 
@@ -2629,6 +3467,7 @@ function render() {
     $('pg-home').innerHTML = renderAdminHome();
     $('pg-students').innerHTML = renderStudents();
     $('pg-staff').innerHTML = renderStaff();
+    $('pg-accounts').innerHTML = renderAccounts();
     $('pg-achievements').innerHTML = renderAchievementReview();
     $('pg-complaints').innerHTML = renderAdminComplaints();
     $('pg-leave').innerHTML = renderAdminLeave();
@@ -2668,18 +3507,27 @@ function render() {
    ============================================================================= */
 
 // Open a tab. dir = 1 (came from the right) or -1 (from the left) for the slide animation.
-function goToTab(name, dir) {
+function goToTab(name, dir, mode) {   // mode: 'back' (from the Back button) | 'reset' (fresh start after sign in)
+  const prev = navState();
   if (name !== appData.tab) { noticeNewSet.clear(); closedNewSet.clear(); }   // forget "NEW" labels when leaving Notices
   // Reset temporary UI state when leaving a page
   leaveMessage = '';
   removeConfirm = '';
   removeStaffConfirm = '';
+  accountsList = null; pwEditing = ''; accRemoveConfirm = '';   // Accounts page reloads from the server each visit
   editingNotice = -1;
   editingAchievement = null;
   editingStudent = -1;
   editingStaff = -1;
   editingHoliday = -1;
   closingComplaint = -1;
+  editingProfile = false;
+  profilePhotoDraft = null;
+  personEdit = null;
+  viewPerson = pendingView;   // a search result opens its profile page; otherwise the normal list
+  pendingView = null;
+  if (mode === 'reset') navStack.length = 0;
+  else if (mode !== 'back' && prev.tab && (prev.tab !== name || !sameView(prev.view, viewPerson))) pushNav(prev);
 
   // Work out slide direction from tab order
   const oldIndex = currentTabs().findIndex(t => t[0] === appData.tab);
@@ -2706,6 +3554,7 @@ function goToTab(name, dir) {
   // Scroll the active tab into the middle of the tab bar
   const active = document.querySelector('.tab.on'), bar = $('tabs');
   if (active) bar.scrollTo({ left: active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2, behavior: 'smooth' });
+  updateBack();
   window.scrollTo(0, 0);
 }
 
@@ -2726,7 +3575,7 @@ mainEl.addEventListener('touchstart', e => {
   swipeStartX = touch.clientX;
   swipeStartY = touch.clientY;
   swipeStartTime = Date.now();
-  swipeAllowed = !e.target.closest('input,textarea,select,.tabs,.wk,.ncard');
+  swipeAllowed = !e.target.closest('input,textarea,select,.tabs,.wk,.ncard,.sugg');
 }, { passive: true });
 
 mainEl.addEventListener('touchend', e => {
@@ -2744,11 +3593,83 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') stepTab(-1);
 });
 
+// Keep the sticky tab bar directly under the header, whatever height the header has (it wraps on narrow phones)
+const siteBar = document.querySelector('#siteView .bar');
+function syncBarHeight() {
+  if (siteBar && siteBar.offsetHeight) document.documentElement.style.setProperty('--barh', siteBar.offsetHeight + 'px');
+}
+if (window.ResizeObserver && siteBar) new ResizeObserver(syncBarHeight).observe(siteBar);
+window.addEventListener('resize', syncBarHeight);
+
+// Edit buttons that open a form inside the page. The form is scrolled into view (and focused on computers).
+const EDIT_OPEN = new Set(['sed', 'sted', 'aed', 'ned', 'hed', 'pedit']);
+function focusEditForm() {
+  requestAnimationFrame(() => {
+    const form = document.querySelector('.pg:not(.hidden) .item.frm:not(.shide), .pg:not(.hidden) .frm.pedit');
+    if (!form) return;
+    const tall = form.getBoundingClientRect().height > window.innerHeight * 0.7;
+    form.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'smooth' });   // tall forms line up under the sticky header
+    const first = form.querySelector('input,select,textarea');
+    if (first && matchMedia('(hover: hover)').matches) first.focus({ preventScroll: true });
+  });
+}
+
+// ----- Back button: returns to the page you were on just before -----
+const navStack = [];            // earlier pages, newest last: { tab, view }
+let suppressPop = false;        // true while our own Back button moves the browser history
+
+const navState = () => ({ tab: appData.tab, view: viewPerson ? { kind: viewPerson.kind, key: viewPerson.key } : null });
+const sameView = (a, b) => (!a && !b) || !!(a && b && a.kind === b.kind && a.key === b.key);
+
+function updateBack() {
+  const row = $('backrow');
+  if (row) row.classList.toggle('hidden', !navStack.length);
+}
+
+// Remember the page we are leaving (also adds a browser-history entry so the phone's back button works)
+function pushNav(prev) {
+  if (!prev || !prev.tab) return;
+  navStack.push(prev);
+  if (navStack.length > 40) navStack.shift();
+  try { history.pushState({ cc: 1 }, ''); } catch (e) {}
+  updateBack();
+}
+
+// Go to the previous page
+function goBack() {
+  const prev = navStack.pop();
+  if (!prev) return;
+  pendingView = prev.view;
+  goToTab(prev.tab, -1, 'back');
+}
+
+// The on-screen Back button
+function backClick() {
+  if (!navStack.length) return;
+  goBack();
+  if (history.state && history.state.cc) {          // keep the browser history in step
+    suppressPop = true;
+    setTimeout(() => { suppressPop = false; }, 400);
+    try { history.back(); } catch (e) { suppressPop = false; }
+  }
+}
+
+// The phone's / browser's own back button does the same thing (or closes an open popup first)
+window.addEventListener('popstate', () => {
+  if (suppressPop) { suppressPop = false; return; }
+  if (!$('sheet').classList.contains('hidden')) {
+    closeSheet();
+    try { history.pushState({ cc: 1 }, ''); } catch (e) {}
+    return;
+  }
+  if (!$('siteView').classList.contains('hidden') && navStack.length) goBack();
+});
+
 // Called once after sign in
 function initSite() {
   simTime = null;
   simDay = '';
-  goToTab('home');
+  goToTab('home', undefined, 'reset');
 }
 
 
@@ -2760,17 +3681,42 @@ function initSite() {
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],[data-sf],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf]';
+const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back]';
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
   if (!e.target.closest('.kb')) document.querySelectorAll('.kb.open').forEach(k => k.classList.remove('open'));
+  // ...and outside a search box closes its suggestions
+  if (!e.target.closest('.sbox')) closeAllSuggestions();
 
   const t = e.target.closest(CLICKABLE);
   if (!t) return;
 
+  // ----- Back button -----
+  if (t.hasAttribute('data-back')) backClick();
+
+  // ----- Search boxes -----
+  else if (t.dataset.sg !== undefined) {                          // pick a suggestion
+    const box = t.closest('.sbox');
+    pickSuggestion(box, (sgItems[box.dataset.sid] || [])[+t.dataset.sg]);
+  }
+  else if (t.dataset.syr) {                                  // Year tab
+    const at = t.dataset.syr.lastIndexOf(':');
+    setSearchFilter(t.dataset.syr.slice(0, at), 'year', t.dataset.syr.slice(at + 1));
+  }
+  else if (t.dataset.vp) {                                   // tapped a name in a list: open the profile
+    const at = t.dataset.vp.indexOf(':');
+    openPersonView(t.dataset.vp.slice(0, at), t.dataset.vp.slice(at + 1));
+  }
+  else if (t.dataset.sclr) {                                 // ✕ clear the search text
+    const box = t.closest('.sbox');
+    setSearchText(box, '');
+    showSuggestions(box, '');
+    box.querySelector('.sinp').focus();
+  }
+
   // ----- Navigation -----
-  if (t.dataset.go) { e.preventDefault(); goToTab(t.dataset.go); }
+  else if (t.dataset.go) { e.preventDefault(); goToTab(t.dataset.go); }
 
   // ----- Fees + scholarships -----
   else if (t.dataset.pay) {                                  // pay a fee (demo)
@@ -2790,7 +3736,6 @@ document.addEventListener('click', e => {
   else if (t.dataset.hf) { holidayFilter = t.dataset.hf; render(); }
   else if (t.dataset.tv) { timetableView = t.dataset.tv; render(); }
   else if (t.dataset.td) { timetableDay = t.dataset.td; render(); }
-  else if (t.dataset.sf) { studentFilter = t.dataset.sf; render(); }
   else if (t.dataset.cf) { staffComplaintFilter = t.dataset.cf; render(); }
   else if (t.dataset.rs) { selectedSemester = t.dataset.rs; render(); }
 
@@ -2847,7 +3792,10 @@ document.addEventListener('click', e => {
   // ----- Edit buttons (data-act="name:value") -----
   else if (t.dataset.act) {
     const parts = t.dataset.act.split(':');
-    if (ACTIONS[parts[0]]) ACTIONS[parts[0]](parts.slice(1).join(':'));
+    if (ACTIONS[parts[0]]) {
+      ACTIONS[parts[0]](parts.slice(1).join(':'));
+      if (EDIT_OPEN.has(parts[0])) focusEditForm();          // Edit opens in place and is brought into view
+    }
   }
 
   // ----- Staff: attendance + demo class -----
@@ -2865,6 +3813,8 @@ document.addEventListener('click', e => {
   else if (t.dataset.trm) removeTeacher(+t.dataset.trm);   // admin: remove teacher
   else if (t.id === 'tadd') addTeacher();                    // admin: add teacher
   else if (t.id === 'sadd') addStudent();
+  else if (t.id === 'accadd') addAccount();                  // admin: Accounts page
+  else if (t.dataset.acc) accountAction(t);
 
   // ----- Achievements -----
   else if (t.dataset.av) {                                   // teacher / admin verifies or rejects
@@ -3216,29 +4166,28 @@ function signIn() {
   $('err').textContent = '';
   setLoading(true);
 
-  // Short pause so the spinner is visible (a real server call would take this time)
-  setTimeout(() => {
-    if (!checkCredentials(user, pass)) {
-      setLoading(false);
-      failSignIn('Incorrect ID or password. Please check and try again.');
-      return;
-    }
+  // Real sign-in: the server checks ID, password and role
+  API.login(user, pass, loginRole).then(async data => {
+    try { await API.hydrate(); sessionStorage.setItem('cc_hyd', '1'); } catch (e) {}   // load shared data
     $('formPane').classList.add('hidden');
     $('donePane').classList.remove('hidden');
     setLoading(false);
     try {
       sessionStorage.setItem('cc_in', '1');
-      sessionStorage.setItem('cc_role', loginRole);
-      sessionStorage.setItem('cc_user', user.includes('@') ? user.split('@')[0] : user);
+      sessionStorage.setItem('cc_role', data.role);
+      const who = data.login_id || user;
+      if (data.name) sessionStorage.setItem('cc_name', data.name);
+      sessionStorage.setItem('cc_user', who.includes('@') ? who.split('@')[0] : who);
     } catch (e) {}
-    setTimeout(() => showSite(1), 1100);
-  }, 850);
+    setTimeout(() => location.reload(), 1000);   // reload so the app starts with the server data
+  }).catch(e => { setLoading(false); failSignIn(e.message); });
 }
 $('signin').onclick = signIn;
 ['user', 'pass'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); }));
 
 // Sign out
-$('logout').onclick = () => {
+$('logout').onclick = async () => {
+  await API.logout();
   try {
     sessionStorage.removeItem('cc_in');
     sessionStorage.removeItem('cc_role');
