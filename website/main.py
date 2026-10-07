@@ -121,6 +121,8 @@ def init_db():
     cols = [r[1] for r in conn.execute("PRAGMA table_info(users)")]
     if "email" not in cols:                      # older app.db: add the column
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "pw_version" not in cols:                 # bumped on every password change
+        conn.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
     if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         email = os.environ.get("ADMIN_EMAIL", "admin@college.example").lower()
@@ -142,9 +144,10 @@ init_db()
 
 
 # -------------------------------------------------------------------- auth
-def create_token(user_id: int) -> str:
+def create_token(user_id: int, version: int = 0) -> str:
     payload = {
         "sub": str(user_id),
+        "v": version,                 # must match users.pw_version, see current_user()
         "exp": dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
@@ -157,11 +160,14 @@ def current_user(
     try:
         data = jwt.decode(creds.credentials, SECRET_KEY, algorithms=["HS256"])
         uid = int(data["sub"])
+        version = int(data.get("v", 0))
     except Exception:
         raise HTTPException(401, "Session expired. Please sign in again.")
     row = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
     if not row:                      # account was deleted
         raise HTTPException(401, "Account no longer exists.")
+    if version != row["pw_version"]:  # password was changed after this token was issued
+        raise HTTPException(401, "Your password was changed. Please sign in again.")
     return row
 
 
@@ -206,7 +212,7 @@ def login(body: LoginIn, request: Request, db: sqlite3.Connection = Depends(get_
     if row["role"] != body.role:
         raise HTTPException(403, f"This is not a {body.role} account. Pick '{row['role'].capitalize()}' above.")
     FAILS.pop(key, None)
-    return {"token": create_token(row["id"]), "role": row["role"], "name": row["name"], "login_id": row["login_id"]}
+    return {"token": create_token(row["id"], row["pw_version"]), "role": row["role"], "name": row["name"], "login_id": row["login_id"]}
 
 
 @app.get("/api/me")
@@ -267,13 +273,18 @@ def list_users(actor=Depends(require_admin), db: sqlite3.Connection = Depends(ge
 
 
 @app.post("/api/users/reset-password")
-def reset_password(body: PasswordIn, _=Depends(require_admin), db: sqlite3.Connection = Depends(get_db)):
+def reset_password(body: PasswordIn, actor=Depends(require_admin), db: sqlite3.Connection = Depends(get_db)):
     if len(body.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
     row = find_user(db, body.login_id)
     if not row:
         raise HTTPException(404, "No such user")
-    db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(body.password), row["id"]))
+    db.execute(
+        "UPDATE users SET password_hash = ?, pw_version = pw_version + 1 WHERE id = ?",
+        (hash_password(body.password), row["id"]),
+    )
+    if row["id"] == actor["id"]:     # the admin just changed their own password: keep them signed in
+        return {"ok": True, "token": create_token(row["id"], row["pw_version"] + 1)}
     return {"ok": True}
 
 
@@ -301,13 +312,27 @@ class CollectionIn(BaseModel):
     data: Any
 
 
+def visible_part(key: str, data, user):
+    """What this person may see of a data set.
+    Students get only their OWN record of the students list (so their profile shows the photo and
+    details the admin entered) and never the other students' phone numbers, addresses, etc."""
+    if key == "cc_stud" and user["role"] == "student" and isinstance(data, list):
+        me = {user["login_id"].lower(), (user["email"] or "").lower()} - {""}
+        own = [r for r in data if isinstance(r, dict)
+               and (str(r.get("roll", "")).lower() in me or str(r.get("email", "")).lower() in me)]
+        return own or None
+    return data
+
+
 @app.get("/api/collections")
 def get_collections(user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
     out = {}
     for row in db.execute("SELECT key, data FROM collections"):
         rule = RULES.get(row["key"])
-        if rule and user["role"] in rule["read"]:
-            out[row["key"]] = json.loads(row["data"])
+        if rule and (user["role"] in rule["read"] or (row["key"] == "cc_stud" and user["role"] == "student")):
+            part = visible_part(row["key"], json.loads(row["data"]), user)
+            if part is not None:
+                out[row["key"]] = part
     return out
 
 

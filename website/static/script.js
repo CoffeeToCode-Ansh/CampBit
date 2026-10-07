@@ -768,6 +768,7 @@ function renderTabs() {
     el.classList.toggle('has-dot', fresh);
     el.title = fresh ? label : '';
   });
+  syncDrawer();
   movePill();
 }
 if (window.addEventListener) window.addEventListener('resize', movePill);
@@ -1780,7 +1781,7 @@ function renderStudents() {
       return `<div class="item${rowClass(s)}" ${rowAttrs(s)}><div class="top"><button class="pwho" data-vp="s:${escapeHtml(s.roll)}" type="button" title="Open profile"><span class="avatar sm">${avatarInner(s.photo, s.name)}</span><b>${escapeHtml(s.name)}</b></button>${s.cr ? '<span class="badge ok">CR</span>' : ''}</div>` +
         `<p>${escapeHtml(s.roll)} · ${s.course} · Year ${s.year} · Batch ${s.batch}</p>` +
         `<div class="btns" style="margin-top:10px">` +
-          (isAdmin ? `<button class="btn ghost sm" data-act="sprof:${i}" type="button">Edit profile</button>` : '') +
+          (canEditProfile('s') ? `<button class="btn ghost sm" data-act="sprof:${i}" type="button">Edit profile</button>` : '') +
           `<button class="btn ghost sm" data-act="sed:${i}" type="button">Edit</button>` +
           `<button class="btn ghost sm" data-cr="${i}" type="button">${s.cr ? 'Remove CR' : 'Make CR'}</button>` +
           `<button class="btn ghost sm" data-rm="${i}" type="button">${removeConfirm === s.roll ? 'Tap again to confirm' : 'Remove'}</button>` +
@@ -2006,7 +2007,14 @@ function setPosition(i, value) {
    ----------------------------------------------------------------------- */
 let accountsList = null, accountsLoading = false, accountsMessage = '', accountsError = '';
 let pwEditing = '', accRemoveConfirm = '';
+let accCreds = null;   // login details to hand over, shown once right after creating an account / setting a password
 const ACCOUNT_ROLE_LABEL = { student: 'Student', staff: 'Teacher', admin: 'Admin' };
+// Random password without look-alike characters (no 0/O, 1/l/I)
+const genPassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', a = new Uint32Array(10);
+  crypto.getRandomValues(a);
+  return Array.from(a, n => chars[n % chars.length]).join('');
+};
 const looksLikeEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 async function loadAccounts() {
@@ -2019,7 +2027,7 @@ async function loadAccounts() {
 }
 
 function renderAccounts() {
-  if (getRole() !== 'admin' || appData.tab !== 'accounts') return '';
+  if (getRole() !== 'admin' || appData.tab !== 'accounts') { accCreds = null; return ''; }   // leaving the page hides the shown password
   if (accountsList === null) {
     loadAccounts();
     return '<h2>Login accounts</h2><p class="sub">Loading…</p>';
@@ -2029,13 +2037,21 @@ function renderAccounts() {
   const who = u => escapeHtml(u.login_id);
 
   return `<h2>Login accounts</h2><p class="sub">${accountsList.length} accounts · only the admin can create accounts and set or change passwords</p>` +
+    `<div class="note" style="margin-bottom:12px">🔒 Passwords are stored scrambled, so nobody (not even the admin) can read an existing one. ` +
+      `To help someone who forgot theirs, tap <b>Set password</b> and give them the new one.</div>` +
     successBox(message) + (error ? `<div class="err" role="alert">${escapeHtml(error)}</div>` : '') +
+    (accCreds ? `<div class="ttcard cred"><b style="font-size:17px">Share these login details</b>` +
+      `<p>Name: <b>${escapeHtml(accCreds.name)}</b></p><p>Login ID: <code>${escapeHtml(accCreds.loginId)}</code></p><p>Password: <code>${escapeHtml(accCreds.password)}</code></p>` +
+      `<div class="btns" style="margin-top:10px"><button class="btn sm" data-acc="copy" data-text="${escapeHtml('Login ID: ' + accCreds.loginId + '\nPassword: ' + accCreds.password)}" type="button">Copy</button>` +
+      `<button class="btn ghost sm" data-acc="credhide" type="button">Hide</button></div>` +
+      `<p class="demo">This is the only time the password is shown. Ask the person to change it after signing in.</p></div>` : '') +
     `<div class="ttcard frm"><b style="font-size:18px">Add a login account</b>` +
       `<label for="acrole">Account type</label><select id="acrole"><option value="student">Student</option><option value="staff">Teacher / Staff</option><option value="admin">Admin</option></select>` +
       `<label for="acname">Full name</label><input id="acname" placeholder="Full name">` +
       `<label for="acid">Roll number / Employee ID</label><input id="acid" placeholder="Student roll no. or teacher employee ID (not needed for admin)">` +
       `<label for="acem">Email</label><input id="acem" type="email" placeholder="name@gmail.com (required for admin, optional for others)">` +
       `<label for="acpw">Password</label><input id="acpw" autocomplete="off" placeholder="At least 6 characters. You give this to the person">` +
+      `<div class="btns" style="margin-top:6px"><button class="btn ghost sm" data-acc="gen" data-target="acpw" type="button">Generate a password</button></div>` +
       `<div class="err" id="acerr" role="alert"></div>` +
       `<button class="btn" id="accadd" type="button" style="width:100%">Create account</button></div>` +
     `<h3 style="margin:20px 0 8px">All accounts</h3><div class="list">` +
@@ -2044,6 +2060,7 @@ function renderAccounts() {
       `<p>Login ID: ${who(u)}${u.email && u.email !== u.login_id ? ' · ' + escapeHtml(u.email) : ''}</p>` +
       (pwEditing === u.login_id
         ? `<div class="frm"><label for="acnewpw">New password</label><input id="acnewpw" autocomplete="off" placeholder="At least 6 characters">` +
+          `<div class="btns" style="margin-top:6px"><button class="btn ghost sm" data-acc="gen" data-target="acnewpw" type="button">Generate a password</button></div>` +
           `<div class="err" id="acpwerr" role="alert"></div>` +
           `<div class="btns" style="margin-top:10px"><button class="btn sm" data-acc="pwsave" data-who="${who(u)}" type="button">Save password</button>` +
           `<button class="btn ghost sm" data-acc="pwcancel" type="button">Cancel</button></div></div>`
@@ -2073,6 +2090,7 @@ async function addAccount() {
   try {
     await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: loginId, name, role, password, email }) });
   } catch (e) { $('accadd').disabled = false; errBox.textContent = e.message; return; }
+  accCreds = { name, loginId: loginId.toLowerCase(), password };
   accountsMessage = '✅ ' + escapeHtml(ACCOUNT_ROLE_LABEL[role]) + ' account created for ' + escapeHtml(name) + '. Login ID: ' + escapeHtml(loginId.toLowerCase());
   accountsList = null;
   render();
@@ -2080,13 +2098,23 @@ async function addAccount() {
 
 async function accountAction(btn) {
   const act = btn.dataset.acc, who = btn.dataset.who;
-  if (act === 'pw') { pwEditing = who; accRemoveConfirm = ''; render(); const f = $('acnewpw'); if (f) f.focus(); }
+  if (act === 'gen') { const f = $(btn.dataset.target); if (f) { f.value = genPassword(); f.focus(); } }
+  else if (act === 'copy') {
+    const done = () => { btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(btn.dataset.text).then(done, () => {});
+  }
+  else if (act === 'credhide') { accCreds = null; render(); }
+  else if (act === 'pw') { pwEditing = who; accRemoveConfirm = ''; render(); const f = $('acnewpw'); if (f) f.focus(); }
   else if (act === 'pwcancel') { pwEditing = ''; render(); }
   else if (act === 'pwsave') {
     const pw = $('acnewpw').value, errBox = $('acpwerr');
     if (pw.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
-    try { await API.request('/api/users/reset-password', { method: 'POST', body: JSON.stringify({ login_id: who, password: pw }) }); }
+    let res;
+    try { res = await API.request('/api/users/reset-password', { method: 'POST', body: JSON.stringify({ login_id: who, password: pw }) }); }
     catch (e) { errBox.textContent = e.message; return; }
+    if (res && res.token) { try { sessionStorage.setItem('cc_token', res.token); } catch (e) {} }   // admin changed their own password: stay signed in
+    const person = (accountsList || []).find(u => u.login_id === who);
+    accCreds = { name: person ? person.name : who, loginId: who, password: pw };
     pwEditing = '';
     accountsMessage = '✅ Password changed for ' + escapeHtml(who) + '.';
     render();
@@ -2455,8 +2483,11 @@ function myStaff() {
   return STAFF_LIST.find(x => x.id.toLowerCase() === u || (x.email && x.email.split('@')[0].toLowerCase() === u)) || null;
 }
 
+// Admin may edit anyone's profile; staff may edit students' profiles (same rule as the Edit button in the lists)
+const canEditProfile = kind => getRole() === 'admin' || (kind === 's' && getRole() === 'staff');
+
 function openPersonProfile(kind, i) {
-  if (getRole() !== 'admin') return;
+  if (!canEditProfile(kind)) return;
   const x = personList(kind)[i];
   if (!x) return;
   personEdit = { kind, i, photo: null };
@@ -2503,7 +2534,7 @@ function showPersonPreview() {
 }
 
 function savePersonProfile() {
-  if (getRole() !== 'admin' || !personEdit) return;
+  if (!personEdit || !canEditProfile(personEdit.kind)) return;
   const { kind, i } = personEdit, list = personList(kind), x = list[i], errBox = $('pzerr');
   if (!x) return;
   const val = id => $(id).value.trim();
@@ -2641,8 +2672,17 @@ function searchSuggestions(kind, q, id) {
   return out;
 }
 
+// The people search (search bar + Department / Year filters) for staff and admin.
+// Choosing a result opens that person's profile with the editor ready. Set to false to hide the search box.
+const PEOPLE_SEARCH_BAR = true;
+// The search bar sits on: admin > Students, admin > Staff, teacher > Students.
+// The Home dashboards of staff and admin do not have one; set this to true to add it there as well.
+const HOME_SEARCH_BAR = false;
+
 // The search box: Department list + Year tabs, then the input with its suggestion dropdown
 function searchBox(kind, id, placeholder, value) {
+  if (!PEOPLE_SEARCH_BAR) return '';   // no search box at all
+  if (id === 'sq-home' && !HOME_SEARCH_BAR) return '';   // the Home dashboards (staff + admin) have no search
   const f = searchFilters[id];
   const filters =
     `<div class="sfilt"><select class="sdept" data-sdept="${id}" aria-label="Department">` +
@@ -2655,7 +2695,7 @@ function searchBox(kind, id, placeholder, value) {
         `</div>`
       : '') +
     `</div>`;
-  return `<div class="sbox" data-sk="${kind}" data-sid="${id}">${filters}<div class="swrap"><div class="sfield">` +
+  return `<div class="sbox${PEOPLE_SEARCH_BAR ? '' : ' nobar'}" data-sk="${kind}" data-sid="${id}">${filters}<div class="swrap"><div class="sfield">` +
     `<span class="sicon" aria-hidden="true">🔍</span>` +
     `<input id="${id}" class="sinp" type="text" role="combobox" aria-expanded="false" aria-controls="${id}-list" aria-autocomplete="list" ` +
       `autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="${placeholder}" placeholder="${placeholder}" value="${escapeHtml(value || '')}">` +
@@ -2760,6 +2800,12 @@ function openPersonView(kind, key) {
   window.scrollTo(0, 0);
 }
 
+// Open the profile editor (photo + details) for the person with this roll number / employee ID
+function openEditFor(kind, key) {
+  const i = personList(kind).findIndex(x => (kind === 's' ? x.roll : x.id) === key);
+  if (i >= 0) openPersonProfile(kind, i);   // does nothing if this person may not edit that profile
+}
+
 // A suggestion was chosen
 function pickSuggestion(box, it) {
   if (!it) return;
@@ -2775,9 +2821,11 @@ function pickSuggestion(box, it) {
     pendingView = { kind: it.type, key: it.key };
     goToTab(it.type === 's' ? 'students' : 'staff');
     window.scrollTo(0, 0);
+    openEditFor(it.type, it.key);                  // ... with the editor ready
     return;
   }
   openPersonView(it.type, it.key);                 // list page: open the profile right here
+  openEditFor(it.type, it.key);                    // ... with the editor ready
 }
 
 // Keyboard: ↑ ↓ move through the suggestions, Enter picks, Esc closes
@@ -2831,7 +2879,7 @@ function renderPersonView(kind, i, message) {
   const subtitle = isS ? escapeHtml(x.course) + ' · Year ' + x.year + ' · Batch ' + escapeHtml(x.batch) : escapeHtml(staffDept(x)) + ' · ' + escapeHtml(x.pos);
   const buttons = editing ? '' :
     `<div class="btns">` +
-      (admin ? `<button class="btn ghost sm" data-act="${isS ? 'sprof' : 'tprof'}:${i}" type="button">Edit profile</button>` : '') +
+      (canEditProfile(kind) ? `<button class="btn ghost sm" data-act="${isS ? 'sprof' : 'tprof'}:${i}" type="button">Edit profile</button>` : '') +
       (canEdit ? `<button class="btn ghost sm" data-act="${isS ? 'sed' : 'sted'}:${i}" type="button">Edit</button>` : '') +
     `</div>`;
   return successBox(message) +
@@ -3575,7 +3623,7 @@ mainEl.addEventListener('touchstart', e => {
   swipeStartX = touch.clientX;
   swipeStartY = touch.clientY;
   swipeStartTime = Date.now();
-  swipeAllowed = !e.target.closest('input,textarea,select,.tabs,.wk,.ncard,.sugg');
+  swipeAllowed = !e.target.closest('input,textarea,select,.tabs,.wk,.ncard,.sugg,.drawer');
 }, { passive: true });
 
 mainEl.addEventListener('touchend', e => {
@@ -3674,6 +3722,198 @@ function initSite() {
 
 
 /* =============================================================================
+   23b. STUDENT NAVIGATION: hamburger menu + search bar
+   -----------------------------------------------------------------------------
+   Students get a ☰ button (slide-in menu with every page) and a search bar in the
+   middle of the header instead of the long row of tabs. Staff and admin keep the tabs.
+   ============================================================================= */
+
+const TAB_ICONS = { home: '🏠', timetable: '🗓️', attendance: '✅', results: '📊', fees: '💳', notices: '📢', holidays: '🏖️',
+  scholarships: '🎓', opps: '💼', achievements: '🏆', leave: '📝', complaints: '📣', mess: '🍽️', profile: '👤' };
+// Extra words that should find a page ("marks" finds Results, "food" finds Mess ...)
+const TAB_KEYWORDS = { home: 'dashboard overview', timetable: 'schedule class timing periods week', attendance: 'present absent percentage',
+  results: 'marks grades cgpa sgpa semester exam score', fees: 'payment dues tuition hostel pay receipt', notices: 'announcements circular news',
+  holidays: 'calendar festival vacation off', scholarships: 'aid stipend merit funding', opps: 'opportunities jobs internship placement career',
+  achievements: 'awards certificates hackathon prizes', leave: 'apply absence casual medical', complaints: 'grievance issue problem hostel',
+  mess: 'food menu breakfast lunch dinner snacks', profile: 'account photo details me' };
+
+// ----- Hamburger drawer -----
+let drawerReturnFocus = null;
+
+function syncDrawer() {
+  const on = getRole() === 'student';
+  $('siteView').classList.toggle('nav-drawer', on);
+  if (!on) { closeDrawer(true); return; }
+  const dots = { notices: hasNewNotices(), complaints: hasNewClosures() };
+  const me = myStudent();
+  $('dwho').innerHTML = `<span class="dava">${avatarInner(me ? me.photo : '', accountName() || userName())}</span><div><b>${displayName()}</b><small>Student</small></div>`;
+  $('dlinks').innerHTML = STUDENT_TABS.map((t, i) =>
+    `<button class="dlink${t[0] === appData.tab ? ' on' : ''}${dots[t[0]] && appData.tab !== t[0] ? ' has-dot' : ''}" data-go="${t[0]}" style="--i:${i}" type="button">` +
+    `<span class="dico" aria-hidden="true">${TAB_ICONS[t[0]] || '•'}</span><span>${t[1]}</span><i class="ndot" aria-hidden="true"></i></button>`).join('');
+  translatePage($('drawer'));
+  // the ☰ button also shows a dot when something is new
+  $('hamb').classList.toggle('has-dot', (dots.notices && appData.tab !== 'notices') || (dots.complaints && appData.tab !== 'complaints'));
+}
+
+function openDrawer() {
+  const d = $('drawer');
+  if (d.classList.contains('open')) return;
+  drawerReturnFocus = document.activeElement;
+  gHide();
+  d.inert = false; d.setAttribute('aria-hidden', 'false');
+  d.classList.add('open');
+  $('hamb').setAttribute('aria-expanded', 'true');
+  document.documentElement.classList.add('no-scroll');
+  setTimeout(() => { const on = d.querySelector('.dlink.on') || d.querySelector('.dlink'); if (on) on.focus({ preventScroll: true }); }, 60);
+}
+
+function closeDrawer(quick) {
+  const d = $('drawer');
+  if (!d.classList.contains('open') && !quick) return;
+  d.classList.remove('open');
+  d.inert = true; d.setAttribute('aria-hidden', 'true');
+  $('hamb').setAttribute('aria-expanded', 'false');
+  document.documentElement.classList.remove('no-scroll');
+  if (!quick && drawerReturnFocus && drawerReturnFocus.focus) drawerReturnFocus.focus({ preventScroll: true });
+  drawerReturnFocus = null;
+}
+
+// ----- Search -----
+let gItems = [], gActive = -1;
+
+// Everything a student can search for: pages first, then the content inside them
+function gBuildIndex() {
+  const out = [];
+  STUDENT_TABS.forEach(t => out.push({ icon: TAB_ICONS[t[0]] || '📄', title: t[1], sub: 'Page', tab: t[0], kw: TAB_KEYWORDS[t[0]] || '', page: true }));
+  (appData.notices || []).forEach(n => out.push({ icon: '📢', title: n[1], sub: 'Notice · ' + n[2], tab: 'notices', kw: n[0] + ' ' + (n[3] || '') }));
+  HOLIDAYS.forEach(h => out.push({ icon: '🏖️', title: h[2], sub: 'Holiday · ' + h[1] + ' ' + MONTH_NAMES[h[0]], tab: 'holidays', kw: h[3] }));
+  (appData.scholarships || []).forEach(x => out.push({ icon: '🎓', title: x[0], sub: 'Scholarship · ' + x[1], tab: 'scholarships', kw: x[2] }));
+  OPPORTUNITIES.forEach(o => out.push({ icon: '💼', title: o.title, sub: o.type + ' · ' + o.co, tab: 'opps', kw: o.loc + ' ' + (o.sk || []).join(' ') }));
+  [SUBJ_DS, SUBJ_MATHS, SUBJ_DE, SUBJ_ENG, SUBJ_OS].forEach(x => out.push({ icon: '🗓️', title: x[0], sub: 'Timetable · ' + x[2], tab: 'timetable', kw: x[1] }));
+  Object.keys(RESULTS).forEach(sem => RESULTS[sem].forEach(r => out.push({ icon: '📊', title: r[1], sub: 'Results · Semester ' + sem, tab: 'results', kw: r[0] })));
+  MESS_MENU.forEach(m => m[2].forEach(dish => out.push({ icon: '🍽️', title: dish, sub: 'Mess · ' + m[0], tab: 'mess', kw: '' })));
+  COMPLAINTS.filter(isMine).forEach(c => out.push({ icon: '📣', title: c.t, sub: 'My complaint · ' + c.id, tab: 'complaints', kw: c.cat }));
+  return out;
+}
+
+// -1 = no match. Every word typed must match; matches at the start of the title score highest.
+function gScore(item, tokens) {
+  const title = item.title.toLowerCase(), hay = (title + ' ' + item.sub + ' ' + item.kw).toLowerCase();
+  let score = item.page ? 1 : 0;
+  for (const t of tokens) {
+    if (!hay.includes(t)) return -1;
+    score += title.startsWith(t) ? 4 : title.split(/[^a-z0-9]+/).some(w => w.startsWith(t)) ? 3 : title.includes(t) ? 2 : 1;
+  }
+  return score;
+}
+
+// Escape the text and wrap the matched words in <mark>
+function gHighlight(text, tokens) {
+  if (!tokens.length) return escapeHtml(text);
+  const re = new RegExp('(' + tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'ig');
+  return String(text).split(re).map((part, i) => i % 2 ? '<mark>' + escapeHtml(part) + '</mark>' : escapeHtml(part)).join('');
+}
+
+const gRecent = () => { try { return JSON.parse(sessionStorage.getItem('cc_recent_q')) || []; } catch (e) { return []; } };
+
+function gRender() {
+  const q = $('gq').value.trim().toLowerCase(), tokens = q.split(/\s+/).filter(Boolean), box = $('gres');
+  let head = '';
+  if (!tokens.length) {
+    const recent = gRecent();
+    gItems = recent.length ? recent : gBuildIndex().filter(i => i.page).slice(0, 6);
+    head = recent.length ? 'Recent' : 'Jump to';
+  } else {
+    gItems = gBuildIndex().map(i => [i, gScore(i, tokens)]).filter(x => x[1] >= 0)
+      .sort((a, b) => b[1] - a[1]).slice(0, 8).map(x => x[0]);
+  }
+  gActive = gItems.length ? 0 : -1;
+  box.innerHTML = gItems.length
+    ? (head ? `<div class="ghead">${head}</div>` : '') + gItems.map((it, i) =>
+        `<button class="gitem${i === 0 ? ' on' : ''}" role="option" id="gi-${i}" data-gi="${i}" aria-selected="${i === 0}" type="button">` +
+        `<span class="gico" aria-hidden="true">${it.icon}</span><span class="gtxt"><b>${gHighlight(it.title, tokens)}</b><small>${escapeHtml(it.sub)}</small></span></button>`).join('')
+    : `<div class="gnone">No matches for “${escapeHtml($('gq').value.trim())}”.<br><small>Try “fees”, “notice” or a subject name.</small></div>`;
+  box.hidden = false;
+  $('gq').setAttribute('aria-expanded', 'true');
+  translatePage(box);
+}
+
+function gHide() {
+  const box = $('gres');
+  if (box) box.hidden = true;
+  if ($('gq')) $('gq').setAttribute('aria-expanded', 'false');
+}
+
+function gMove(step) {
+  if (!gItems.length) return;
+  gActive = (gActive + step + gItems.length) % gItems.length;
+  $('gres').querySelectorAll('.gitem').forEach((el, i) => {
+    el.classList.toggle('on', i === gActive);
+    el.setAttribute('aria-selected', String(i === gActive));
+    if (i === gActive) { el.scrollIntoView({ block: 'nearest' }); $('gq').setAttribute('aria-activedescendant', el.id); }
+  });
+}
+
+function gPick(i) {
+  const it = gItems[i];
+  if (!it) return;
+  try {   // remember it for this session ("Recent")
+    const next = [it].concat(gRecent().filter(r => r.title !== it.title || r.tab !== it.tab)).slice(0, 5);
+    sessionStorage.setItem('cc_recent_q', JSON.stringify(next));
+  } catch (e) {}
+  $('gq').value = '';
+  $('gq').blur();
+  gHide();
+  goToTab(it.tab);
+}
+
+$('hamb').addEventListener('click', () => $('drawer').classList.contains('open') ? closeDrawer() : openDrawer());
+$('gq').addEventListener('input', gRender);
+$('gq').addEventListener('focus', gRender);
+$('gq').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); gMove(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); gMove(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); gPick(gActive); }
+  else if (e.key === 'Escape') { $('gq').value = ''; gHide(); $('gq').blur(); }
+});
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-dclose]')) closeDrawer();
+  else if (e.target.closest('#drawer .dlink')) closeDrawer();   // the page / sheet itself opens in the main handler
+  const item = e.target.closest('.gitem');
+  if (item) gPick(+item.dataset.gi);
+  else if (!e.target.closest('#gsearch')) gHide();
+});
+document.addEventListener('keydown', e => {
+  if ($('siteView').classList.contains('hidden') || getRole() !== 'student') return;
+  if (e.key === 'Escape') closeDrawer();
+  else if (e.key === '/' && !e.target.closest('input,textarea,select')) { e.preventDefault(); $('gq').focus(); }
+  else if (e.key === 'Tab' && $('drawer').classList.contains('open')) {   // keep Tab inside the open menu
+    const items = [...$('drawer').querySelectorAll('button')], first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+// Swipe the menu to the left to close it (also: tap outside it, or press Esc)
+(() => {
+  let x0 = null, y0 = 0;
+  const panel = $('drawer').querySelector('.dpanel');
+  panel.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  panel.addEventListener('touchmove', e => {
+    if (x0 === null) return;
+    const dx = e.touches[0].clientX - x0, dy = Math.abs(e.touches[0].clientY - y0);
+    if (dx < -60 && dy < 40) { x0 = null; closeDrawer(); }
+  }, { passive: true });
+  panel.addEventListener('touchend', () => { x0 = null; }, { passive: true });
+})();
+
+// Wide screens show the whole header again, so close the menu if the window is resized
+window.addEventListener('resize', () => { if (getRole() !== 'student') closeDrawer(true); });
+
+// Build stamp shown in the page footer. If you do not see it there, the browser is still using an old script.js.
+const BUILD = 'build 07-Oct-d';
+document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('build')) f.append(' · ' + BUILD); });
+
+/* =============================================================================
    24. GLOBAL CLICK HANDLER
    -----------------------------------------------------------------------------
    One listener handles every button in the app. Each button carries a
@@ -3681,7 +3921,7 @@ function initSite() {
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back]';
+const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd';   // [data-acc] and #accadd = Accounts page buttons
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -4158,6 +4398,24 @@ function failSignIn(message) {
   }
 }
 
+// The guard greets the person after a successful sign-in: he hops, waves with a smile and
+// a bubble says "Welcome, <first name>!". The wave uses two pictures that sit exactly over
+// guard.webp: guard-wave.webp (body, raised hand removed) and guard-hand.webp (hand + forearm,
+// which swings at the wrist). If they are missing, an emoji hand waves instead.
+// Returns how many milliseconds to wait before the page reloads (0 = no greeting).
+function greetGuard(name) {
+  const mascot = document.querySelector('.mascot');
+  if (!mascot) return 0;
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;   // many Windows PCs have animations switched off
+  const first = String(name || '').trim().split(/\s+/)[0];
+  mascot.querySelector('.hello').textContent = first ? 'Welcome, ' + first + '!' : 'Welcome!';
+  const ready = [...mascot.querySelectorAll('.pose img')].every(img => img.complete && img.naturalWidth > 0);
+  mascot.classList.toggle('has-pose', ready);
+  mascot.classList.toggle('still', calm);      // reduce motion: show the waving pose without moving
+  mascot.classList.add('greet');
+  return calm ? 1800 : ready ? 3000 : 2600;
+}
+
 // Sign in
 function signIn() {
   if (signingIn) return;
@@ -4172,6 +4430,7 @@ function signIn() {
     $('formPane').classList.add('hidden');
     $('donePane').classList.remove('hidden');
     setLoading(false);
+    const greetMs = greetGuard(data.name);
     try {
       sessionStorage.setItem('cc_in', '1');
       sessionStorage.setItem('cc_role', data.role);
@@ -4179,7 +4438,8 @@ function signIn() {
       if (data.name) sessionStorage.setItem('cc_name', data.name);
       sessionStorage.setItem('cc_user', who.includes('@') ? who.split('@')[0] : who);
     } catch (e) {}
-    setTimeout(() => location.reload(), 1000);   // reload so the app starts with the server data
+    // reload so the app starts with the server data (a little later when the guard is greeting)
+    setTimeout(() => location.reload(), greetMs || 1000);
   }).catch(e => { setLoading(false); failSignIn(e.message); });
 }
 $('signin').onclick = signIn;
