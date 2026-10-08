@@ -88,9 +88,29 @@
       try { sessionStorage.setItem('cc_token', data.token); } catch (e) {}
       return data;
     },
+    // Download a protected file: fetch it with the sign-in token, then save it from memory
+    async download(path, fallbackName) {
+      const headers = {};
+      const token = getToken();
+      if (token) headers.Authorization = 'Bearer ' + token;
+      let res;
+      try { res = await fetch(path, { headers }); }
+      catch (e) { throw new Error('Cannot reach the server. Check your connection.'); }
+      if (!res.ok) {
+        let detail = 'Download failed';
+        try { const d = await res.json(); if (d && typeof d.detail === 'string') detail = d.detail; } catch (e) {}
+        const err = new Error(detail); err.status = res.status; throw err;
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fallbackName || 'download';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    },
     async logout() {
       await Promise.all(Object.keys(timers).map(k => { clearTimeout(timers[k]); delete timers[k]; return push(k); }));
-      try { sessionStorage.removeItem('cc_token'); sessionStorage.removeItem('cc_name'); } catch (e) {}
+      try { sessionStorage.removeItem('cc_token'); sessionStorage.removeItem('cc_name'); sessionStorage.removeItem('cc_photo'); } catch (e) {}
       SYNC_KEYS.forEach(k => rawRemove.call(localStorage, k));   // don't leave data on shared computers
     }
   };

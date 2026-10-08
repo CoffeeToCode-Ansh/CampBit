@@ -59,9 +59,15 @@ const $ = id => document.getElementById(id);
 
 // Current login role: 'student' | 'staff' | 'admin' (kept in sessionStorage)
 const getRole = () => {
-  try { return sessionStorage.getItem('cc_role') || 'student'; }
-  catch (e) { return 'student'; }
+  try {
+    const r = sessionStorage.getItem('cc_role') || 'student';
+    return r === 'staff' ? 'faculty' : r;      // sessions opened before the role split
+  } catch (e) { return 'student'; }
 };
+const STAFF_ROLES = ['faculty', 'hod', 'principal', 'warden', 'placement_officer'];
+const isStaffRole = () => STAFF_ROLES.includes(getRole());
+const leaveBucket = () => isStaffRole() ? 'staff' : getRole();   // leave data keeps one "staff" bucket
+const ssGet = k => { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } };
 
 // Escape text before putting it inside HTML (prevents broken markup / injection)
 const escapeHtml = value =>
@@ -78,7 +84,7 @@ const displayName = () => {
   let name = 'Student';
   try {
     name = accountName() || sessionStorage.getItem('cc_user') ||
-      (getRole() === 'staff' ? 'Staff' : getRole() === 'admin' ? 'Admin' : 'Student');
+      (isStaffRole() ? 'Staff' : getRole() === 'admin' ? 'Admin' : getRole() === 'guest' ? 'Guest' : 'Student');
   } catch (e) {}
   if (getRole() === 'admin' && adminProfile().name) name = adminProfile().name;   // name edited on the profile page
   return escapeHtml(name);
@@ -92,7 +98,7 @@ const userName = () => {
 };
 
 // True for teachers and admins (people who can post notices/holidays etc.)
-const isStaffOrAdmin = () => getRole() === 'staff' || getRole() === 'admin';
+const isStaffOrAdmin = () => isStaffRole() || getRole() === 'admin';
 
 // localStorage JSON helpers (never throw)
 const loadJson = (key, fallback) => {
@@ -230,20 +236,41 @@ const appData = {
 const STUDENT_TABS = [
   ["home", "Home"], ["timetable", "Timetable"], ["attendance", "Attendance"], ["results", "Results"],
   ["fees", "Fees"], ["notices", "Notices"], ["holidays", "Holidays"], ["scholarships", "Scholarships"],
-  ["opps", "Opportunities"], ["achievements", "Achievements"], ["leave", "Leave"],
+  ["opps", "Opportunities"], ["achievements", "Achievements"], ["resume", "AI Resume"], ["resources", "Resources"], ["leave", "Leave"],
   ["complaints", "Complaints"], ["mess", "Mess"], ["profile", "Profile"]
 ];
-const STAFF_TABS = [
-  ["home", "Home"], ["timetable", "Timetable"], ["attendance", "Attendance"], ["students", "Students"],
-  ["achievements", "Achievements"], ["notices", "Notices"], ["holidays", "Holidays"],
-  ["complaints", "Complaints"], ["leave", "Leave"], ["profile", "Profile"]
-];
-const ADMIN_TABS = [
-  ["home", "Home"], ["students", "Students"], ["staff", "Staff"], ["achievements", "Achievements"],
-  ["complaints", "Complaints"], ["notices", "Notices"],["leave", "Leave"], ["holidays", "Holidays"], ["accounts", "Accounts"], ["profile", "Profile"]
-];
-const currentTabs = () =>
-  getRole() === 'staff' ? STAFF_TABS : getRole() === 'admin' ? ADMIN_TABS : STUDENT_TABS;
+const T = {                                       // [page id, label]
+  home: ["home", "Home"], timetable: ["timetable", "Timetable"], attendance: ["attendance", "Attendance"],
+  students: ["students", "Students"], achievements: ["achievements", "Achievements"], notices: ["notices", "Notices"],
+  holidays: ["holidays", "Holidays"], complaints: ["complaints", "Complaints"], leave: ["leave", "Leave"],
+  profile: ["profile", "Profile"], resources: ["resources", "Resources"], recruit: ["recruit", "Recruiter requests"]
+};
+const TABS_BY_ROLE = {
+  student: STUDENT_TABS,
+  faculty:           [T.home, T.timetable, T.attendance, T.students, T.achievements, T.resources, T.notices, T.holidays, T.leave, T.profile],
+  hod:               [T.home, T.timetable, T.attendance, T.students, T.achievements, T.resources, T.notices, T.holidays, T.complaints, T.leave, T.profile],
+  principal:         [T.home, T.students, T.achievements, T.resources, T.complaints, T.notices, T.holidays, T.leave, T.profile],
+  warden:            [T.home, T.students, T.complaints, T.notices, T.holidays, T.leave, T.profile],
+  placement_officer: [T.home, T.students, T.recruit, T.notices, T.holidays, T.leave, T.profile],
+  guest: [["home", "Dashboard"], ["students", "Candidates"], ["recruit", "Requests"]],   // recruiter view: anonymous profiles only
+  admin: [
+    ["home", "Home"], ["students", "Students"], ["staff", "Staff"], ["achievements", "Achievements"],
+    ["resources", "Resources"], ["recruit", "Recruiter requests"], ["complaints", "Complaints"], ["notices", "Notices"], ["leave", "Leave"], ["holidays", "Holidays"],
+    ["accounts", "Accounts"], ["profile", "Profile"]
+  ]
+};
+const currentTabs = () => TABS_BY_ROLE[getRole()] || STUDENT_TABS;
+const hasTab = name => currentTabs().some(t => t[0] === name);
+const canPostNotice = () => ['hod', 'principal', 'warden', 'placement_officer', 'admin'].includes(getRole());
+const canEditHolidays = () => ['principal', 'admin'].includes(getRole());
+function noticeAudiences() {                      // what this role may send to (the server checks it again)
+  switch (getRole()) {
+    case 'hod': return ['Dept:' + ssGet('cc_dept')];
+    case 'warden': return ['Hostel:' + ssGet('cc_hostel')];
+    case 'placement_officer': return ['Placement'];
+    default: return ['Everyone', 'Students', 'Staff'];
+  }
+}
 
 // Attendance helpers
 const overallAttendance = () => {
@@ -312,7 +339,7 @@ const STAFF_WEEK = {
 };
 
 // Which timetable to use for the signed-in role
-const currentWeek = () => getRole() === 'staff' ? STAFF_WEEK : STUDENT_WEEK;
+const currentWeek = () => isStaffRole() ? STAFF_WEEK : STUDENT_WEEK;
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Today's day name (or the demo day when the staff "simulate class" demo is on)
@@ -334,7 +361,7 @@ function slotHtml(row, status) {
   const label = status ? { done: 'Done', now: 'Live', up: 'Upcoming' }[status] : row[5];
 
   // Staff can tap a running lecture/lab to jump to attendance marking
-  const canTakeAttendance = status === 'now' && getRole() === 'staff' &&
+  const canTakeAttendance = status === 'now' && isStaffRole() &&
     (row[5] === 'Lecture' || row[5] === 'Lab');
   const takeAttrs = canTakeAttendance
     ? ` data-take="${escapeHtml(row[2] + ' · ' + row[4])}" role="button" tabindex="0" style="cursor:pointer"`
@@ -365,7 +392,7 @@ function renderTodayTimetable() {
     : next ? `Next: <b>${next[2]}</b> at ${formatMinutes(next[0])} · ${next[3]}`
     : 'All classes done for today 🎉';
 
-  const demoButton = getRole() === 'staff'
+  const demoButton = isStaffRole()
     ? `<button class="btn ghost sm" data-sim type="button">${simTime === null ? 'Demo: simulate class' : 'Stop demo'}</button>`
     : '';
 
@@ -517,8 +544,8 @@ const leaveLeft = type =>
 
 // Leave page (apply form + my requests + (staff only) requests to review)
 function renderLeave() {
-  const isStaff = getRole() === 'staff';
-  const role = getRole();
+  const isStaff = isStaffRole();
+  const role = leaveBucket();
   const mine = isStaff ? leaveRequests.staff.filter(isMyLeave) : leaveRequests.student;
 
   let out = `<h2>Leave</h2><p class="sub">${isStaff ? 'Apply for leave (the admin approves it) and review student requests' : 'Apply for leave and track your requests'}</p>`;
@@ -566,7 +593,7 @@ function renderLeave() {
 
 // Validate and save a new leave request
 function submitLeave() {
-  const role = getRole();
+  const role = leaveBucket();
   const from = $('lf').value, to = $('lto').value, reason = $('lr').value.trim(), errBox = $('lerr');
 
   if (!from || !to) { errBox.textContent = 'Choose both dates.'; return; }
@@ -600,7 +627,7 @@ function decideStudentLeave(id, status) {
 
 // Admin decides a staff member's request (admin only)
 function decideStaffLeave(id, status) {
-  if (getRole() !== 'admin') return;
+  if (!['admin', 'principal'].includes(getRole())) return;
   const req = leaveRequests.staff.find(r => r.id === id);
   if (!req || req.s !== 'Pending') return;
   req.s = status; req.by = userName(); req.at = Date.now();
@@ -660,9 +687,10 @@ function renderStaffHome() {
 // Staff profile page (shows the admin-edited record when the signed-in ID matches one)
 function renderStaffProfile() {
   const r = myStaff();
+  const photo = myPhotoValue(r);
   const v = (key, demo) => escapeHtml(r ? (r[key] || '—') : demo);
   return `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
-    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(r.photo, r.name) : avatarInner('')}</div>` +
+    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(photo, r.name) : avatarInner(photo)}</div>` +
       `<div class="pinfo"><b class="pname">${r ? escapeHtml(r.name) : displayName()}</b>` +
       `<p>${r ? escapeHtml(r.pos + ' · ' + r.dept) : 'Assistant Professor · Computer Science'}</p></div></div>` +
     `<div class="kv">` +
@@ -674,7 +702,7 @@ function renderStaffProfile() {
       `<div><small>Cabin</small>${v('cabin', 'Block A, Room 12')}</div>` +
       `<div><small>Subjects</small>${v('subjects', 'Data Structures, Algorithms')}</div>` +
       (r ? `<div><small>Qualification</small>${v('qualification', '')}</div>` : `<div><small>Mentor group</small>Semester 3, Section A</div>`) +
-    `</div>` +
+    `</div>` + renderAccountSettings() +
     `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>` +
     `<p class="demo">${r ? 'Your details are kept up to date by the admin office.' : 'All details shown are demo data.'}</p>` +
     `<p class="swipe-hint">Tip: swipe left or right anywhere on a page to switch menus.</p>`;
@@ -686,9 +714,9 @@ function renderStaffProfile() {
    ============================================================================= */
 
 // Placeholder + hint text for each login role
-const PLACEHOLDERS = { student: 'Roll number or email', staff: 'Employee ID or email', admin: 'Admin ID or email' };
-const ROLE_HINTS = { student: 'Sign in as a student', staff: 'Sign in as staff', admin: 'Sign in as admin' };
-const ROLE_ICONS = { student: '🎓', staff: '🧑‍🏫', admin: '🛡️' };
+const PLACEHOLDERS = { student: 'Roll number or email', staff: 'Employee ID or email', admin: 'Admin ID or email', guest: 'Guest ID' };
+const ROLE_HINTS = { student: 'Sign in as a student', staff: 'Sign in as staff', admin: 'Sign in as admin', guest: 'Sign in as a recruiter / guest' };
+const ROLE_ICONS = { student: '🎓', staff: '🧑‍🏫', admin: '🛡️', guest: '👤' };
 let prevRole = 'student';   // remembers the last role so we can slide left/right
 
 // Show the login screen again (after sign out)
@@ -720,7 +748,7 @@ $('seg').addEventListener('click', e => {
   $('phoneBox').dataset.role = loginRole;
 
   // Slide direction depends on whether the new role is to the right or left
-  const order = ['student', 'staff', 'admin'];
+  const order = ['student', 'staff', 'admin', 'guest'];
   const direction = order.indexOf(loginRole) > order.indexOf(prevRole) ? 'sl-r' : 'sl-l';
   prevRole = loginRole;
 
@@ -1078,7 +1106,7 @@ function renderMarkAttendance() {
 if (window.addEventListener) {
   window.addEventListener('online', () => {
     syncQueue();
-    if (getRole() === 'staff' && appData.tab === 'attendance') render();
+    if (isStaffRole() && appData.tab === 'attendance') render();
   });
 }
 
@@ -1425,6 +1453,8 @@ const TRANSLATIONS = [
   ["Welcome back", "वापसी पर स्वागत है", "ପୁନଃ ସ୍ୱାଗତ"],
   ["Sign in as a student", "छात्र के रूप में साइन इन करें", "ଛାତ୍ର ଭାବେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ"],
   ["Sign in as staff", "स्टाफ के रूप में साइन इन करें", "କର୍ମଚାରୀ ଭାବେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ"],
+  ["Guest", "अतिथि", "ଅତିଥି"],
+  ["Sign in as a guest", "अतिथि के रूप में साइन इन करें", "ଅତିଥି ଭାବେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ"],
   ["Sign in as admin", "एडमिन के रूप में साइन इन करें", "ଆଡମିନ୍ ଭାବେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ"],
   ["Sign in to see everything College Connect has for you.", "कॉलेज कनेक्ट में आपके लिए जो कुछ है, देखने के लिए साइन इन करें।", "କଲେଜ୍ କନେକ୍ଟରେ ଆପଣଙ୍କ ପାଇଁ ଯାହା ଅଛି ଦେଖିବାକୁ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ।"],
   ["Remember me", "मुझे याद रखें", "ମୋତେ ମନେ ରଖନ୍ତୁ"],
@@ -1583,6 +1613,7 @@ document.addEventListener('change', e => {
   else if (t.id === 'cphoto') handlePhoto(t);                                        // complaint photo
   else if (t.id === 'pphoto') handleProfilePhoto(t);                                 // admin profile photo
   else if (t.id === 'pzphoto') handlePersonPhoto(t);                                 // student / staff photo (admin)
+  else if (t.id === 'myphoto') handleMyPhoto(t);                                     // my own photo (student / staff)
   else if (t.id === 'ccs') updateMissCalculator();                                   // attendance calculator
   else if (t.dataset && t.dataset.sdept !== undefined) setSearchFilter(t.dataset.sdept, 'dept', t.value);   // search: Department
   else if (t.dataset && t.dataset.pos !== undefined) setPosition(+t.dataset.pos, t.value);  // admin: staff position
@@ -1591,6 +1622,14 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => {
   if (e.target.classList && e.target.classList.contains('sinp')) onSearchInput(e.target);
   if (e.target.id === 'ccn' || e.target.id === 'ccs') updateMissCalculator();
+  if (e.target.dataset && e.target.dataset.rzf) rz.form[e.target.dataset.rzf] = e.target.value;   // keep AI-resume form text across redraws
+  if (e.target.id === 'resq') filterResources(e.target.value);
+  const d = e.target.dataset || {};
+  if (d.rcf) { rc.f[d.rcf] = e.target.value; if (e.target.tagName === 'SELECT') { rc.items = null; rcFetch('items'); render(); } }
+  if (d.rcq) rc.reqForm[d.rcq] = e.target.value;
+  if (d.rcd) { recDraft = recDraft || { visible: recState.profile ? recState.profile.visible : false, cgpa: recState.profile ? recState.profile.cgpa : '', backlogs: recState.profile ? String(recState.profile.backlogs) : '0',
+    subjects: recState.profile ? recState.profile.subjects.join(', ') : '', skills: recState.profile ? recState.profile.skills.join(', ') : '' };
+    recDraft[d.rcd] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; }
 });
 
 // Apply saved language on load
@@ -1610,7 +1649,10 @@ if (lang !== 'en') {
 
 const COURSES = ['B.Tech CSE', 'B.Tech IT', 'B.Tech ECE', 'B.Tech EEE', 'B.Tech Mechanical', 'B.Tech Civil', 'MCA', 'MBA'];
 const BATCHES = ['2022–2026', '2023–2027', '2024–2028', '2025–2029'];
-const POSITIONS = ['Faculty', 'Mentor', 'Class Coordinator', 'HOD', 'Exam Cell Incharge', 'Warden', 'Placement Officer'];
+const POSITIONS = ['Faculty', 'Mentor', 'Class Coordinator', 'HOD', 'Exam Cell Incharge', 'Principal', 'Warden', 'Placement Officer'];
+// The position label is cosmetic; THIS is what the server enforces
+const POSITION_ROLE = { 'Faculty': 'faculty', 'Mentor': 'faculty', 'Class Coordinator': 'faculty', 'Exam Cell Incharge': 'faculty',
+  'HOD': 'hod', 'Principal': 'principal', 'Warden': 'warden', 'Placement Officer': 'placement_officer' };
 
 // Students are saved in localStorage ("cc_stud"). cr = class representative.
 const STUDENTS = loadJson('cc_stud',
@@ -1811,7 +1853,6 @@ function staffEditForm(x, i, cls, attrs) {
   return `<div class="item frm${cls}" ${attrs}><b>Edit staff member</b>` +
     `<label for="esfn">Name</label><input id="esfn" value="${escapeHtml(x.name)}">` +
     `<label for="esfd">Department</label><input id="esfd" value="${escapeHtml(x.dept)}">` +
-    `<label for="esfp">Position</label><select id="esfp">${POSITIONS.map(p => `<option ${p === x.pos ? 'selected' : ''}>${p}</option>`).join('')}</select>` +
     `<div class="err" id="esferr" role="alert"></div>` +
     `<div class="btns" style="margin-top:10px"><button class="btn sm" data-act="stsave:${i}" type="button">Save</button><button class="btn ghost sm" data-act="stcancel" type="button">Cancel</button></div></div>`;
 }
@@ -1908,6 +1949,7 @@ function renderStaff() {
         `<div><label for="tdp">Department</label><input id="tdp" placeholder="e.g. CSE"></div>` +
       `</div>` +
       `<label for="tps">Position</label><select id="tps">${POSITIONS.map(p => `<option>${p}</option>`).join('')}</select>` +
+      `<label for="thl">Hostel (wardens only)</label><input id="thl" placeholder="e.g. Block A">` +
       `<label for="tem">Email</label><input id="tem" type="email" placeholder="name@college.example">` +
       `<div class="two">` +
         `<div><label for="tph">Phone</label><input id="tph" type="tel" placeholder="10-digit mobile number"></div>` +
@@ -1958,9 +2000,11 @@ async function addTeacher() {
 
   const password = $('tpw').value;
   if (password.length < 6) { errBox.textContent = 'Password must be at least 6 characters.'; return; }
+  const role = POSITION_ROLE[$('tps').value], hostel = $('thl').value.trim();
+  if (role === 'warden' && !hostel) { errBox.textContent = 'Enter the hostel this warden looks after.'; return; }
   try {   // create the login account on the server first
     $('tadd').disabled = true;
-    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: id, name, role: 'staff', password, email }) });
+    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: id, name, role, password, email, dept, hostel }) });
   } catch (e) { $('tadd').disabled = false; errBox.textContent = e.message; return; }
 
   STAFF_LIST.push({ id, name, dept, pos: $('tps').value, email, phone, joined, subjects: $('tsb').value.trim() });
@@ -1989,9 +2033,21 @@ function removeTeacher(i) {
 
 
 // Change a staff member's position
-function setPosition(i, value) {
+async function setPosition(i, value) {
   const x = STAFF_LIST[i];
   if (!x || !POSITIONS.includes(value)) return;
+  const role = POSITION_ROLE[value];
+  let hostel = '';
+  if (role === 'warden') {
+    hostel = (prompt('Which hostel does this warden look after? (e.g. Block A)') || '').trim();
+    if (!hostel) { render(); return; }
+  }
+  try {
+    await API.request('/api/users/' + encodeURIComponent(x.id) + '/role',
+      { method: 'POST', body: JSON.stringify({ role, dept: x.dept, hostel }) });
+  } catch (e) {
+    if (e.status !== 404) { staffMessage = '⚠️ ' + escapeHtml(e.message); render(); return; }   // 404 = demo row with no login yet
+  }
   x.pos = value;
   saveJson('cc_staff', STAFF_LIST);
   staffMessage = '✅ ' + escapeHtml(x.name) + ' is now ' + value + '.';
@@ -2008,7 +2064,8 @@ function setPosition(i, value) {
 let accountsList = null, accountsLoading = false, accountsMessage = '', accountsError = '';
 let pwEditing = '', accRemoveConfirm = '';
 let accCreds = null;   // login details to hand over, shown once right after creating an account / setting a password
-const ACCOUNT_ROLE_LABEL = { student: 'Student', staff: 'Teacher', admin: 'Admin' };
+const ACCOUNT_ROLE_LABEL = { student: 'Student', faculty: 'Faculty', hod: 'HOD', principal: 'Principal', warden: 'Warden',
+  placement_officer: 'Placement officer', admin: 'Admin', guest: 'Guest / Recruiter' };
 // Random password without look-alike characters (no 0/O, 1/l/I)
 const genPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', a = new Uint32Array(10);
@@ -2046,7 +2103,9 @@ function renderAccounts() {
       `<button class="btn ghost sm" data-acc="credhide" type="button">Hide</button></div>` +
       `<p class="demo">This is the only time the password is shown. Ask the person to change it after signing in.</p></div>` : '') +
     `<div class="ttcard frm"><b style="font-size:18px">Add a login account</b>` +
-      `<label for="acrole">Account type</label><select id="acrole"><option value="student">Student</option><option value="staff">Teacher / Staff</option><option value="admin">Admin</option></select>` +
+      `<label for="acrole">Account type</label><select id="acrole">${Object.entries(ACCOUNT_ROLE_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>` +
+      `<label for="acdept">Department (faculty / HOD)</label><input id="acdept" placeholder="e.g. CSE">` +
+      `<label for="achostel">Hostel (warden)</label><input id="achostel" placeholder="e.g. Block A">` +
       `<label for="acname">Full name</label><input id="acname" placeholder="Full name">` +
       `<label for="acid">Roll number / Employee ID</label><input id="acid" placeholder="Student roll no. or teacher employee ID (not needed for admin)">` +
       `<label for="acem">Email</label><input id="acem" type="email" placeholder="name@gmail.com (required for admin, optional for others)">` +
@@ -2088,7 +2147,7 @@ async function addAccount() {
 
   $('accadd').disabled = true;
   try {
-    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: loginId, name, role, password, email }) });
+    await API.request('/api/users', { method: 'POST', body: JSON.stringify({ login_id: loginId, name, role, password, email, dept: $('acdept').value.trim(), hostel: $('achostel').value.trim() }) });
   } catch (e) { $('accadd').disabled = false; errBox.textContent = e.message; return; }
   accCreds = { name, loginId: loginId.toLowerCase(), password };
   accountsMessage = '✅ ' + escapeHtml(ACCOUNT_ROLE_LABEL[role]) + ' account created for ' + escapeHtml(name) + '. Login ID: ' + escapeHtml(loginId.toLowerCase());
@@ -2478,13 +2537,13 @@ function myStudent() {
   return STUDENTS.find(x => x.roll === u) || null;
 }
 function myStaff() {
-  if (getRole() !== 'staff') return null;
+  if (!isStaffRole()) return null;
   const u = userName().toLowerCase();
   return STAFF_LIST.find(x => x.id.toLowerCase() === u || (x.email && x.email.split('@')[0].toLowerCase() === u)) || null;
 }
 
 // Admin may edit anyone's profile; staff may edit students' profiles (same rule as the Edit button in the lists)
-const canEditProfile = kind => getRole() === 'admin' || (kind === 's' && getRole() === 'staff');
+const canEditProfile = kind => getRole() === 'admin' || (kind === 's' && isStaffRole());
 
 function openPersonProfile(kind, i) {
   if (!canEditProfile(kind)) return;
@@ -2867,7 +2926,7 @@ document.addEventListener('focusin', e => {
 // Edit opens the edit form right here on the profile page.
 function renderPersonView(kind, i, message) {
   const isS = kind === 's', x = personList(kind)[i], role = getRole(), admin = role === 'admin';
-  const canEdit = admin || (isS && role === 'staff');                  // same rule as the lists
+  const canEdit = admin || (isS && isStaffRole());                  // same rule as the lists
   const editing = isS ? editingStudent === i : editingStaff === i;
   const show = v => v ? escapeHtml(v) : '—';
   const details = isS
@@ -2938,13 +2997,13 @@ function renderNotices() {
 
   let out = '<h2>Notices</h2>' + successBox(message);
 
-  // Compose form (teachers and admin only)
-  if (isStaffOrAdmin()) {
+  // Compose form (hod / principal / warden / placement officer / admin)
+  if (canPostNotice()) {
     out += `<div class="ttcard frm" style="margin-bottom:14px"><b style="font-size:18px">Compose a notice</b>` +
       `<label for="ntt">Title</label><input id="ntt" placeholder="Notice title">` +
       `<div class="two">` +
         `<div><label for="ntc">Category</label><select id="ntc"><option>General</option><option>Exam</option><option>Fee</option><option>Event</option></select></div>` +
-        `<div><label for="nta">Send to</label><select id="nta"><option>Everyone</option><option>Students</option><option>Staff</option></select></div>` +
+        `<div><label for="nta">Send to</label><select id="nta">${noticeAudiences().map(a => `<option>${escapeHtml(a)}</option>`).join('')}</select></div>` +
       `</div>` +
       `<label for="ntm">Message</label><textarea id="ntm" placeholder="Write the notice"></textarea>` +
       `<div class="err" id="nterr" role="alert"></div>` +
@@ -2968,7 +3027,7 @@ function renderNotices() {
         `<label for="ent">Title</label><input id="ent" value="${escapeHtml(n[1])}">` +
         `<div class="two">` +
           `<div><label for="enc">Category</label><select id="enc">${['General', 'Exam', 'Fee', 'Event'].map(c => `<option ${c === n[0] ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
-          `<div><label for="ena">Send to</label><select id="ena">${['Everyone', 'Students', 'Staff'].map(c => `<option ${c === (n[4] || 'Everyone') ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
+          `<div><label for="ena">Send to</label><select id="ena">${[...new Set([n[4] || 'Everyone', ...noticeAudiences()])].map(c => `<option ${c === (n[4] || 'Everyone') ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
         `</div>` +
         `<label for="enm">Message</label><textarea id="enm">${escapeHtml(n[3])}</textarea>` +
         `<div class="err" id="enerr" role="alert"></div>` +
@@ -3028,7 +3087,7 @@ function deleteNotice(i) {
 /* ----- Holidays page (staff/admin get an "add holiday" form) --------------- */
 function renderHolidaysPage() {
   let out = renderHolidays();
-  if (!isStaffOrAdmin()) return out;   // students only see the list
+  if (!canEditHolidays()) return out;   // only principal / admin can add holidays
 
   const message = holidayMessage; holidayMessage = '';
   const addForm = `${successBox(message)}` +
@@ -3250,17 +3309,20 @@ function saveStudent(i) {
 }
 
 // Save an edited staff member
-function saveStaff(i) {
+async function saveStaff(i) {
   const x = STAFF_LIST[i];
   if (!x) return;
   const name = $('esfn').value.trim(), dept = $('esfd').value.trim(), errBox = $('esferr');
   if (name.length < 2) { errBox.textContent = 'Enter the staff name.'; return; }
   if (dept.length < 2) { errBox.textContent = 'Enter the department.'; return; }
 
+  try {   // keep the server-side department (used for access scope) in step with what is shown
+    await API.request('/api/users/' + encodeURIComponent(x.id) + '/role',
+      { method: 'POST', body: JSON.stringify({ role: POSITION_ROLE[x.pos] || 'faculty', dept }) });
+  } catch (e) { if (e.status !== 404) { errBox.textContent = e.message; return; } }
+
   x.name = name;
   x.dept = dept;
-  const posBox = $('esfp');
-  if (posBox && POSITIONS.includes(posBox.value)) x.pos = posBox.value;
   saveJson('cc_staff', STAFF_LIST);
   editingStaff = -1;
   staffMessage = '✅ ' + escapeHtml(name) + ' updated.';
@@ -3441,12 +3503,12 @@ function renderBasePages() {
     `<button class="stat" data-go="fees"><span>Fees due</span><b>${formatRupees(totalFeesDue())}</b><span>Next: 15 Oct 2026</span></button>` +
     `<button class="stat" data-go="notices"><span>New notices</span><b>${appData.notices.length}</b><span>Latest: ${appData.notices[0][1]}</span></button>` +
     `<button class="stat" data-go="scholarships"><span>Scholarships open</span><b>${appData.scholarships.length}</b><span>${Object.keys(appData.appliedScholarships).length} applied</span></button></div>` +
-    renderNotifications() +
+    recBanner() + renderNotifications() +
     renderTodayTimetable();
 
   // --- Timetable (Week / Day switch) ---
   $('pg-timetable').innerHTML =
-    `<h2>Timetable</h2><p class="sub">${getRole() === 'staff' ? 'Your teaching schedule' : 'Semester 3 · Computer Science'}</p>` +
+    `<h2>Timetable</h2><p class="sub">${isStaffRole() ? 'Your teaching schedule' : 'Semester 3 · Computer Science'}</p>` +
     `<div class="chips"><button class="chip ${timetableView === 'week' ? 'on' : ''}" data-tv="week">Week</button>` +
     `<button class="chip ${timetableView === 'day' ? 'on' : ''}" data-tv="day">Day</button></div>` +
     (timetableView === 'week' ? renderWeekTable() : renderDayView());
@@ -3477,9 +3539,10 @@ function renderBasePages() {
 // Student profile page (shows the admin-edited record when the signed-in roll number matches one)
 function renderStudentProfile() {
   const r = myStudent();
+  const photo = myPhotoValue(r);
   const v = (key, demo) => escapeHtml(r ? (r[key] || '—') : demo);
   return `<h2>Profile</h2><p class="sub">&nbsp;</p>` +
-    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(r.photo, r.name) : avatarInner('')}</div>` +
+    `<div class="item pcard"><div class="avatar big">${r ? avatarInner(photo, r.name) : avatarInner(photo)}</div>` +
       `<div class="pinfo"><b class="pname">${r ? escapeHtml(r.name) : displayName()}</b>` +
       `<p>${r ? escapeHtml(r.course + ' · Year ' + r.year) : 'B.Tech · Computer Science · Semester 3'}</p></div></div>` +
     `<div class="kv">` +
@@ -3490,7 +3553,7 @@ function renderStudentProfile() {
       `<div><small>Mentor</small>${v('mentor', 'Dr. A. Mishra')}</div>` +
       `<div><small>Hostel</small>${v('hostel', 'Block B, Room 214')}</div>` +
       (r ? `<div><small>Guardian</small>${v('guardian', '')}</div><div><small>Blood group</small>${v('blood', '')}</div><div><small>Address</small>${v('address', '')}</div>` : '') +
-    `</div>` +
+    `</div>` + renderRecruitingCard() + renderAccountSettings() +
     `<div class="btns" style="margin-top:16px"><button class="btn ghost sm" id="theme" type="button">Toggle light / dark</button></div>` +
     `<p class="demo">${r ? 'Your details are kept up to date by the admin office.' : 'All details shown are demo data.'}</p>` +
     `<p class="swipe-hint">Tip: swipe left or right anywhere on a page to switch menus.</p>`;
@@ -3520,15 +3583,23 @@ function render() {
     $('pg-complaints').innerHTML = renderAdminComplaints();
     $('pg-leave').innerHTML = renderAdminLeave();
     $('pg-profile').innerHTML = renderAdminProfile();
+    $('pg-resources').innerHTML = renderResources();
+    $('pg-recruit').innerHTML = renderRecruitAdmin();
+  } else if (role === 'guest') {
+    $('pg-home').innerHTML = renderGuestHome();
+    $('pg-students').innerHTML = renderGuestCandidates();
+    $('pg-recruit').innerHTML = renderGuestRequests();
   } else {
-    if (role === 'staff') {
+    if (isStaffRole()) {
       $('pg-home').innerHTML = renderStaffHome();
       $('pg-profile').innerHTML = renderStaffProfile();
-      $('pg-attendance').innerHTML = renderMarkAttendance();
-      $('pg-students').innerHTML = renderStudents();
-      $('pg-achievements').innerHTML = renderAchievementReview();
-      $('pg-timetable').innerHTML += simulationButton();
-      $('pg-complaints').innerHTML = renderStaffComplaints();
+      if (hasTab('attendance'))   $('pg-attendance').innerHTML = renderMarkAttendance();
+      if (hasTab('students'))     $('pg-students').innerHTML = renderStudents();
+      if (hasTab('achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
+      if (hasTab('timetable'))    $('pg-timetable').innerHTML += simulationButton();
+      if (hasTab('complaints'))   $('pg-complaints').innerHTML = renderStaffComplaints();
+      if (hasTab('resources'))    $('pg-resources').innerHTML = renderResources();
+      if (hasTab('recruit'))      $('pg-recruit').innerHTML = renderRecruitAdmin();
     } else {
       // student
       $('pg-results').innerHTML = renderResults();
@@ -3537,8 +3608,11 @@ function render() {
       $('pg-achievements').innerHTML = renderStudentAchievements();
       $('pg-complaints').innerHTML = renderComplaints();
       $('pg-mess').innerHTML = renderMess();
+      if (recState === null || recStale) loadRecruiting();       // contact requests + recruiter visibility
+      $('pg-resume').innerHTML = renderResume();
+      $('pg-resources').innerHTML = renderResources();
     }
-    $('pg-leave').innerHTML = renderLeave();   // student + staff
+    $('pg-leave').innerHTML = role === 'principal' ? renderAdminLeave() : renderLeave();   // principal approves staff leave
   }
 
   // Shared by all roles
@@ -3556,6 +3630,7 @@ function render() {
 
 // Open a tab. dir = 1 (came from the right) or -1 (from the left) for the slide animation.
 function goToTab(name, dir, mode) {   // mode: 'back' (from the Back button) | 'reset' (fresh start after sign in)
+  if (name !== 'home' && !hasTab(name)) return;   // this role has no such page
   const prev = navState();
   if (name !== appData.tab) { noticeNewSet.clear(); closedNewSet.clear(); }   // forget "NEW" labels when leaving Notices
   // Reset temporary UI state when leaving a page
@@ -3563,6 +3638,8 @@ function goToTab(name, dir, mode) {   // mode: 'back' (from the Back button) | '
   removeConfirm = '';
   removeStaffConfirm = '';
   accountsList = null; pwEditing = ''; accRemoveConfirm = '';   // Accounts page reloads from the server each visit
+  resList = null; resDel = ''; resMsg = ''; resErr = ''; acctMsg = { photo: '', pw: '' };
+  rc.sum = null; rc.items = null; rc.reqs = null; rc.reqOpen = ''; po.list = null; po.declining = ''; recStale = true;   // Resources page reloads each visit
   editingNotice = -1;
   editingAchievement = null;
   editingStudent = -1;
@@ -3729,13 +3806,14 @@ function initSite() {
    ============================================================================= */
 
 const TAB_ICONS = { home: '🏠', timetable: '🗓️', attendance: '✅', results: '📊', fees: '💳', notices: '📢', holidays: '🏖️',
-  scholarships: '🎓', opps: '💼', achievements: '🏆', leave: '📝', complaints: '📣', mess: '🍽️', profile: '👤' };
+  scholarships: '🎓', opps: '💼', achievements: '🏆', leave: '📝', complaints: '📣', mess: '🍽️', profile: '👤', resume: '📄', resources: '📚', recruit: '🤝' };
 // Extra words that should find a page ("marks" finds Results, "food" finds Mess ...)
 const TAB_KEYWORDS = { home: 'dashboard overview', timetable: 'schedule class timing periods week', attendance: 'present absent percentage',
   results: 'marks grades cgpa sgpa semester exam score', fees: 'payment dues tuition hostel pay receipt', notices: 'announcements circular news',
   holidays: 'calendar festival vacation off', scholarships: 'aid stipend merit funding', opps: 'opportunities jobs internship placement career',
   achievements: 'awards certificates hackathon prizes', leave: 'apply absence casual medical', complaints: 'grievance issue problem hostel',
-  mess: 'food menu breakfast lunch dinner snacks', profile: 'account photo details me' };
+  mess: 'food menu breakfast lunch dinner snacks', profile: 'account photo password details me',
+  recruit: 'recruiter contact request placement candidates shortlist', resume: 'cv ai rate skills improve career job', resources: 'notes study material download pdf slides papers syllabus' };
 
 // ----- Hamburger drawer -----
 let drawerReturnFocus = null;
@@ -3746,7 +3824,7 @@ function syncDrawer() {
   if (!on) { closeDrawer(true); return; }
   const dots = { notices: hasNewNotices(), complaints: hasNewClosures() };
   const me = myStudent();
-  $('dwho').innerHTML = `<span class="dava">${avatarInner(me ? me.photo : '', accountName() || userName())}</span><div><b>${displayName()}</b><small>Student</small></div>`;
+  $('dwho').innerHTML = `<span class="dava">${avatarInner(myPhotoValue(me), accountName() || userName())}</span><div><b>${displayName()}</b><small>Student</small></div>`;
   $('dlinks').innerHTML = STUDENT_TABS.map((t, i) =>
     `<button class="dlink${t[0] === appData.tab ? ' on' : ''}${dots[t[0]] && appData.tab !== t[0] ? ' has-dot' : ''}" data-go="${t[0]}" style="--i:${i}" type="button">` +
     `<span class="dico" aria-hidden="true">${TAB_ICONS[t[0]] || '•'}</span><span>${t[1]}</span><i class="ndot" aria-hidden="true"></i></button>`).join('');
@@ -3909,8 +3987,517 @@ document.addEventListener('keydown', e => {
 // Wide screens show the whole header again, so close the menu if the window is resized
 window.addEventListener('resize', () => { if (getRole() !== 'student') closeDrawer(true); });
 
+/* =============================================================================
+   24a. NEW: MY ACCOUNT (photo + password), RESOURCES, AI RESUME, GUEST VIEWS
+   ============================================================================= */
+
+// ----- Recruiter / Guest dashboard (anonymous profiles) -----
+// The browser only ever receives anonymous cards from the server: no name, photo, phone, e-mail,
+// address or registration number. Contact details come back only after officer approval + student consent.
+const RC_STATUS = {
+  pending_officer:  ['⏳', 'Waiting for the placement officer', ''],
+  awaiting_student: ['🕐', 'Approved by the college · waiting for the student\'s consent', ''],
+  approved:         ['✅', 'Contact released', 'ok'],
+  declined_officer: ['✖', 'Declined by the placement office', 'bad'],
+  declined_student: ['✖', 'The student chose not to share contact details', 'bad']
+};
+const YEAR_TXT = ['', '1st', '2nd', '3rd', '4th', '5th'];
+const fmtMonth = m => m ? new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '';
+const fmtDay = iso => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+let rc = { sum: null, items: null, total: 0, branches: [], reqs: null, busy: {}, err: '', msg: '', open: {}, reqOpen: '',
+           reqForm: { company: '', message: '' }, f: { branch: '', cgpa: '', skills: '', ach: '', short: false } };
+
+async function rcFetch(what) {
+  if (rc.busy[what]) return;
+  rc.busy[what] = true;
+  try {
+    if (what === 'sum') rc.sum = await API.request('/api/recruiter/summary');
+    else if (what === 'reqs') rc.reqs = await API.request('/api/recruiter/requests');
+    else {
+      const q = new URLSearchParams({ branch: rc.f.branch, min_cgpa: rc.f.cgpa, skills: rc.f.skills, ach: rc.f.ach, shortlisted: rc.f.short ? '1' : '' });
+      const d = await API.request('/api/recruiter/candidates?' + q.toString());
+      rc.items = d.items; rc.total = d.total; rc.branches = d.branches;
+    }
+  } catch (e) {
+    rc.err = e.message;
+    if (what === 'sum') rc.sum = { eligible: 0, shortlisted: 0, pending: 0, awaiting: 0, released: 0 };
+    else if (what === 'reqs') rc.reqs = []; else rc.items = [];
+  }
+  rc.busy[what] = false;
+  render();
+}
+
+function rcEnsure() {
+  const t = appData.tab;
+  if (rc.sum === null) rcFetch('sum');
+  if (t === 'students' && rc.items === null) rcFetch('items');
+  if (t === 'recruit' && rc.reqs === null) rcFetch('reqs');
+}
+
+const rcPrivacyStrip = () =>
+  `<div class="rc-privacy"><span>🔒 <b>Anonymous Profiles</b></span><span>🛡 <b>Contact Protected</b></span>` +
+  `<span class="rc-privacy-note">Names, photos, phone numbers, e-mails, addresses and registration numbers are never shown.</span></div>`;
+
+function renderGuestHome() {
+  rcEnsure();
+  const s = rc.sum || { eligible: '–', shortlisted: '–', pending: '–', awaiting: '–', released: '–' };
+  return `<div class="rc-hero"><small>RECRUITER DASHBOARD</small><h2>${greetingHtml()}, ${displayName()}</h2>` +
+    `<p>Find eligible students by skills, CGPA and verified achievements. Profiles stay anonymous until the student agrees to be contacted.</p></div>` +
+    rcPrivacyStrip() +
+    `<div class="grid">` +
+      `<button class="stat" data-go="students"><span>Eligible candidates</span><b>${s.eligible}</b><span>Browse profiles</span></button>` +
+      `<button class="stat" data-rc="shortonly"><span>Shortlisted</span><b>${s.shortlisted}</b><span>Your picks</span></button>` +
+      `<button class="stat" data-go="recruit"><span>Requests in progress</span><b>${(s.pending === '–') ? '–' : s.pending + s.awaiting}</b><span>${s.pending} with officer · ${s.awaiting} with students</span></button>` +
+      `<button class="stat" data-go="recruit"><span>Contacts released</span><b>${s.released}</b><span>Approved by both</span></button>` +
+    `</div>` +
+    `<div class="ttcard rc-how"><b style="font-size:18px">How contact works</b><ol>` +
+      `<li><b>Browse</b> anonymous profiles and shortlist the ones you like.</li>` +
+      `<li><b>Request contact</b>: it goes to the college placement officer.</li>` +
+      `<li><b>Placement officer</b> reviews and approves your request.</li>` +
+      `<li><b>Student consent</b>: the student chooses whether to share their details with you.</li>` +
+      `<li><b>Contact released</b> only after steps 3 and 4.</li></ol></div>`;
+}
+
+function rcCard(i) {
+  const e = escapeHtml, st = i.request ? RC_STATUS[i.request.status] : null;
+  const open = !!rc.open[i.code], nA = i.achievements.length, nC = i.certificates.length;
+  const form = rc.reqOpen === i.code
+    ? `<div class="rc-reqform"><label for="rcq-co">Company / organisation</label><input id="rcq-co" data-rcq="company" maxlength="80" value="${e(rc.reqForm.company)}" placeholder="e.g. Acme Technologies">` +
+      `<label for="rcq-msg">Message to the placement officer (optional)</label><textarea id="rcq-msg" data-rcq="message" maxlength="400" placeholder="Role, location, why this profile fits…">${e(rc.reqForm.message)}</textarea>` +
+      `<p class="sub" style="margin:6px 0">Goes to the placement officer first. The student's details are shared only if the officer approves <b>and</b> the student agrees.</p>` +
+      `<div class="err" id="rcq-err" role="alert"></div>` +
+      `<div class="btns"><button class="btn sm" data-rc="send:${i.code}" type="button">Send request</button><button class="btn ghost sm" data-rc="cancel" type="button">Cancel</button></div></div>` : '';
+  return `<article class="rc-card">` +
+    `<div class="rc-top"><div class="rc-mask" aria-hidden="true">🕶️</div><div class="rc-idbox"><b class="rc-id">${e(i.code)}</b>` +
+      `<div class="rc-pills"><span class="rc-pill priv">🔒 Anonymous Profile</span><span class="rc-pill prot">🛡 Contact Protected</span></div></div>` +
+      `<button class="rc-star${i.short ? ' on' : ''}" data-rc="star:${e(i.code)}" type="button" aria-pressed="${i.short}" aria-label="${i.short ? 'Remove from shortlist' : 'Shortlist'}">${i.short ? '★' : '☆'}</button></div>` +
+    `<div class="rc-meta"><div><small>Branch</small><b>${e(i.branch)}</b></div><div><small>Year</small><b>${YEAR_TXT[i.year] || e(String(i.year || '–'))}</b></div>` +
+      `<div class="rc-cg"><small>CGPA</small><b>${e(i.cgpa)}</b></div><div><small>Backlogs</small><b>${i.backlogs}</b></div></div>` +
+    (i.subjects.length ? `<p class="rc-acad"><small>Relevant academics</small>Strong in ${i.subjects.map(e).join(', ')}</p>` : '') +
+    (i.skills.length ? `<div class="rc-chips">${i.skills.map(x => `<span class="rc-chip">${e(x)}</span>`).join('')}</div>` : '<p class="sub">No skills listed.</p>') +
+    `<button class="rc-link" data-rc="open:${e(i.code)}" type="button" aria-expanded="${open}">✔ ${nA} verified achievement${nA === 1 ? '' : 's'} · 📜 ${nC} certificate${nC === 1 ? '' : 's'} <span>${open ? '▴' : '▾'}</span></button>` +
+    (open ? `<div class="rc-ach">` +
+      (nA ? `<h5>Verified achievements</h5><ul>${i.achievements.map(a => `<li><b>${e(a.title)}</b><span>${e(a.cat)}${a.month ? ' · ' + fmtMonth(a.month) : ''}</span></li>`).join('')}</ul>` : '') +
+      (nC ? `<h5>Certificates</h5><ul>${i.certificates.map(a => `<li><b>${e(a.title)}</b><span>${a.month ? fmtMonth(a.month) : ''}</span></li>`).join('')}</ul>` : '') +
+      (!nA && !nC ? '<p class="sub">Nothing verified by the college yet.</p>' : '') + `</div>` : '') +
+    (st ? `<div class="rc-status ${st[2]}">${st[0]} ${e(st[1])}</div>` : '') +
+    (form || (!st || st[2] === 'bad' ? `<div class="btns" style="margin-top:12px"><button class="btn sm" data-rc="req:${e(i.code)}" type="button">Request contact</button></div>` : '')) +
+  `</article>`;
+}
+
+function renderGuestCandidates() {
+  rcEnsure();
+  const f = rc.f, e = escapeHtml;
+  const filters = `<div class="rc-filters">` +
+    `<div><label for="rcf-b">Branch</label><select id="rcf-b" data-rcf="branch"><option value="">All branches</option>${rc.branches.map(b => `<option${b === f.branch ? ' selected' : ''}>${e(b)}</option>`).join('')}</select></div>` +
+    `<div><label for="rcf-c">Min CGPA</label><input id="rcf-c" data-rcf="cgpa" type="number" min="0" max="10" step="0.1" placeholder="e.g. 7.5" value="${e(f.cgpa)}"></div>` +
+    `<div><label for="rcf-s">Skills</label><input id="rcf-s" data-rcf="skills" placeholder="Python, SQL" value="${e(f.skills)}"></div>` +
+    `<div><label for="rcf-a">Achievements</label><input id="rcf-a" data-rcf="ach" placeholder="hackathon, AWS" value="${e(f.ach)}"></div>` +
+    `<div class="rc-fbtns"><button class="chip${f.short ? ' on' : ''}" data-rc="short" type="button" aria-pressed="${f.short}">★ Shortlisted</button>` +
+    `<button class="btn sm" data-rc="apply" type="button">Search</button><button class="btn ghost sm" data-rc="clear" type="button">Clear</button></div></div>`;
+  const err = rc.err ? `<div class="err" role="alert">${e(rc.err)}</div>` : '';
+  rc.err = '';
+  const msg = rc.msg ? `<div class="okmsg">${e(rc.msg)}</div>` : ''; rc.msg = '';
+  let list;
+  if (rc.items === null) list = '<p class="sub">Loading candidates…</p>';
+  else if (!rc.items.length) list = `<div class="note">${rc.total ? 'No candidate matches these filters.' : 'No students have shared an anonymous profile yet.'}</div>`;
+  else list = `<div class="rc-grid">${rc.items.map(rcCard).join('')}</div>`;
+  return `<h2>Candidates</h2>` + rcPrivacyStrip() + filters + err + msg +
+    `<p class="sub">${rc.items ? rc.items.length + ' of ' + rc.total + ' eligible students' : ''}</p>` + list;
+}
+
+function renderGuestRequests() {
+  rcEnsure();
+  const e = escapeHtml;
+  const err = rc.err ? `<div class="err" role="alert">${e(rc.err)}</div>` : ''; rc.err = '';
+  if (rc.reqs === null) return '<h2>Contact requests</h2><p class="sub">Loading…</p>';
+  const step = (n, on) => `<i class="${on ? 'on' : ''}"></i>`;
+  const rank = { pending_officer: 1, awaiting_student: 2, approved: 3 };
+  return `<h2>Contact requests</h2>${rcPrivacyStrip()}${err}` +
+    `<p class="sub">${rc.reqs.length} request${rc.reqs.length === 1 ? '' : 's'}</p><div class="list">` +
+    (rc.reqs.length ? rc.reqs.map(r => {
+      const st = RC_STATUS[r.status], k = rank[r.status] || 0;
+      return `<div class="item"><div class="top"><b>${e(r.code)}</b><span class="badge ${st[2]}">${st[0]} ${r.status === 'approved' ? 'Released' : r.status.startsWith('declined') ? 'Declined' : 'In progress'}</span></div>` +
+        `<p>${e(r.company)} · sent ${fmtDay(r.at)}</p>` + (r.message ? `<p class="sub">${e(r.message)}</p>` : '') +
+        (k ? `<div class="rc-steps" aria-hidden="true">${step(1, k >= 1)}${step(2, k >= 2)}${step(3, k >= 3)}<span>Officer</span><span>Student</span><span>Released</span></div>` : '') +
+        `<p class="rc-status ${st[2]}">${st[0]} ${e(st[1])}</p>` +
+        (r.contact ? `<div class="rc-contact"><b>Contact details released</b><div class="kv"><div><small>Name</small>${e(r.contact.name)}</div>` +
+          `<div><small>Email</small>${r.contact.email ? `<a href="mailto:${e(r.contact.email)}">${e(r.contact.email)}</a>` : '—'}</div>` +
+          `<div><small>Phone</small>${e(r.contact.phone) || '—'}</div></div></div>` : '') + `</div>`;
+    }).join('') : '<div class="note">No requests yet. Open a candidate and choose “Request contact”.</div>') + `</div>`;
+}
+
+async function rcAction(btn) {
+  const [act, code] = btn.dataset.rc.split(':');
+  if (act === 'apply') { rc.items = null; rcFetch('items'); render(); }
+  else if (act === 'clear') { rc.f = { branch: '', cgpa: '', skills: '', ach: '', short: false }; rc.items = null; rcFetch('items'); render(); }
+  else if (act === 'short') { rc.f.short = !rc.f.short; rc.items = null; rcFetch('items'); render(); }
+  else if (act === 'shortonly') { rc.f.short = true; goToTab('students'); }                  // dashboard tile: open Candidates with the shortlist filter on
+  else if (act === 'open') { rc.open[code] = !rc.open[code]; render(); }
+  else if (act === 'req') { rc.reqOpen = code; rc.reqForm = { company: rc.reqForm.company, message: '' }; render(); }
+  else if (act === 'cancel') { rc.reqOpen = ''; render(); }
+  else if (act === 'star') {
+    const it = (rc.items || []).find(x => x.code === code); if (!it) return;
+    try { await API.request('/api/recruiter/shortlist/' + code, { method: it.short ? 'DELETE' : 'POST' }); }
+    catch (e) { rc.err = e.message; render(); return; }
+    it.short = !it.short;
+    if (rc.sum) rc.sum.shortlisted += it.short ? 1 : -1;
+    if (rc.f.short && !it.short) rc.items = rc.items.filter(x => x !== it);
+    render();
+  } else if (act === 'send') {
+    const err = $('rcq-err'), co = rc.reqForm.company.trim();
+    if (co.length < 2) { err.textContent = 'Enter your company or organisation name.'; return; }
+    btn.disabled = true;
+    try { await API.request('/api/recruiter/requests', { method: 'POST', body: JSON.stringify({ code, company: co, message: rc.reqForm.message }) }); }
+    catch (e) { btn.disabled = false; err.textContent = e.message; return; }
+    const it = (rc.items || []).find(x => x.code === code);
+    if (it) it.request = { status: 'pending_officer' };
+    rc.reqOpen = ''; rc.sum = null; rc.reqs = null;
+    rc.msg = 'Request sent to the placement officer for ' + code + '.';
+    render();
+  }
+}
+
+// ----- Placement officer (and admin): approve or decline contact requests -----
+let po = { list: null, busy: false, err: '', msg: '', declining: '' };
+async function poLoad() {
+  if (po.busy) return; po.busy = true;
+  try { po.list = await API.request('/api/placement/requests'); } catch (e) { po.list = []; po.err = e.message; }
+  po.busy = false; render();
+}
+function renderRecruitAdmin() {
+  if (!hasTab('recruit') || appData.tab !== 'recruit') return '';
+  if (po.list === null) { poLoad(); return '<h2>Recruiter requests</h2><p class="sub">Loading…</p>'; }
+  const e = escapeHtml, pending = po.list.filter(r => r.status === 'pending_officer'), rest = po.list.filter(r => r.status !== 'pending_officer');
+  const msg = po.msg, err = po.err; po.msg = ''; po.err = '';
+  const card = r => {
+    const st = RC_STATUS[r.status];
+    return `<div class="item"><div class="top"><b>${e(r.code)} · ${e(r.branch)}${r.year ? ' · Year ' + r.year : ''}</b><span class="badge ${st[2]}">${st[0]}</span></div>` +
+      `<p><b>${e(r.company)}</b> · ${e(r.recruiter)}</p>` + (r.message ? `<p class="sub">“${e(r.message)}”</p>` : '') +
+      `<p class="sub">Student: ${e(r.student)} · requested ${fmtDay(r.at)}</p><p class="rc-status ${st[2]}">${st[0]} ${e(st[1])}</p>` +
+      (r.status === 'pending_officer' ? `<div class="btns" style="margin-top:10px"><button class="btn sm" data-po="ok:${r.id}" type="button">Approve</button>` +
+        `<button class="btn ghost sm" data-po="no:${r.id}" type="button">${po.declining === String(r.id) ? 'Tap again to decline' : 'Decline'}</button></div>` : '') + `</div>`;
+  };
+  return `<h2>Recruiter requests</h2><p class="sub">Approving only passes the request to the student. Their contact details are shared when they agree.</p>` +
+    successBox(msg) + (err ? `<div class="err" role="alert">${e(err)}</div>` : '') +
+    `<h3 style="margin:14px 0 8px">Waiting for your decision (${pending.length})</h3><div class="list">${pending.map(card).join('') || '<p class="sub">Nothing waiting.</p>'}</div>` +
+    (rest.length ? `<h3 style="margin:18px 0 8px">Earlier requests</h3><div class="list">${rest.map(card).join('')}</div>` : '');
+}
+async function poAction(btn) {
+  const [act, id] = btn.dataset.po.split(':');
+  if (act === 'no' && po.declining !== id) { po.declining = id; render(); return; }
+  po.declining = '';
+  try { await API.request('/api/placement/requests/' + id + '/decide', { method: 'POST', body: JSON.stringify({ approve: act === 'ok' }) }); }
+  catch (e) { po.err = e.message; po.list = null; render(); return; }
+  po.msg = act === 'ok' ? 'Approved. The student has been asked for consent.' : 'Request declined.';
+  po.list = null; render();
+}
+
+// ----- Student: choose what recruiters see, answer contact requests -----
+let recState = null, recStale = true, recBusy = false, recDraft = null, recMsg = '', recErr = '';
+async function loadRecruiting() {
+  if (recBusy) return; recBusy = true; recStale = false;
+  try { recState = await API.request('/api/me/recruiting'); } catch (e) { if (!recState) recState = { profile: null, requests: [] }; }
+  recBusy = false; render();
+}
+const recPending = () => recState ? recState.requests.filter(r => r.status === 'awaiting_student').length : 0;
+function recBanner() {
+  const n = recPending();
+  return n ? `<div class="note" style="margin-top:14px">🔔 ${n} recruiter${n === 1 ? ' wants' : 's want'} your contact details. <button class="btn sm" data-go="profile" type="button">Review</button></div>` : '';
+}
+function renderRecruitingCard() {
+  if (getRole() !== 'student') return '';
+  if (!recState) return `<div class="ttcard frm acct"><h3>🕶️ Recruiter visibility</h3><p class="sub">Loading…</p></div>`;
+  const e = escapeHtml, p = recState.profile || { visible: false, cgpa: '', backlogs: 0, subjects: [], skills: [], code: '' };
+  const d = recDraft || { visible: p.visible, cgpa: p.cgpa, backlogs: String(p.backlogs), subjects: p.subjects.join(', '), skills: p.skills.join(', ') };
+  const msg = recMsg, err = recErr; recMsg = ''; recErr = '';
+  const field = (k, label, ph, type) => `<label for="rcd-${k}">${label}</label><input id="rcd-${k}" data-rcd="${k}" ${type ? `type="${type}"` : ''} placeholder="${ph}" value="${e(d[k])}">`;
+  return `<div class="ttcard frm acct"><h3>🕶️ Recruiter visibility</h3>` +
+    `<p class="sub">Recruiters can see an <b>anonymous</b> profile: an ID, branch, year, CGPA, skills and verified achievements. Your name, photo, phone, e-mail and address are never shown. ` +
+    `Your contact details are shared only if the placement officer approves a request <b>and</b> you agree.</p>` +
+    `<label class="rc-switch"><input type="checkbox" id="rcd-visible" data-rcd="visible" ${d.visible ? 'checked' : ''}> Show my anonymous profile to recruiters</label>` +
+    (p.code ? `<p style="margin:8px 0 0">Your anonymous ID: <b>${e(p.code)}</b></p>` : '') +
+    field('cgpa', 'CGPA', 'e.g. 8.2', 'number').replace('<input', '<input min="0" max="10" step="0.01"') +
+    field('backlogs', 'Active backlogs', '0', 'number').replace('<input', '<input min="0" max="50"') +
+    field('subjects', 'Strong subjects (comma separated)', 'e.g. Data Structures, DBMS') +
+    field('skills', 'Skills (comma separated)', 'e.g. Python, SQL, React') +
+    `<p class="sub" style="margin:6px 0 0">Do not put your name or contact details here. They are removed automatically. CGPA is self-reported.</p>` +
+    (err ? `<div class="err" role="alert">${e(err)}</div>` : '') + (msg ? `<div class="okmsg">${e(msg)}</div>` : '') +
+    `<button class="btn sm" data-rec="save" type="button" style="margin-top:8px">Save</button>` +
+    (recState.requests.length ? `<h3 style="margin-top:18px">Contact requests</h3><div class="list">` + recState.requests.map(r => {
+      const st = RC_STATUS[r.status];
+      return `<div class="item"><div class="top"><b>${e(r.company)}</b><span class="badge ${st[2]}">${st[0]}</span></div>` +
+        (r.message ? `<p class="sub">“${e(r.message)}”</p>` : '') + `<p class="sub">Approved by the placement office · ${fmtDay(r.at)}</p>` +
+        (r.status === 'awaiting_student'
+          ? `<div class="btns" style="margin-top:8px"><button class="btn sm" data-rec="acc:${r.id}" type="button">Share my contact details</button><button class="btn ghost sm" data-rec="dec:${r.id}" type="button">No thanks</button></div>`
+          : `<p class="rc-status ${st[2]}">${r.status === 'approved' ? '✅ You agreed to share your contact details' : '✖ You declined'}</p>`) + `</div>`;
+    }).join('') + `</div>` : '') + `</div>`;
+}
+async function recAction(btn) {
+  const [act, id] = btn.dataset.rec.split(':');
+  if (act === 'save') {
+    const g = k => $('rcd-' + k).value;
+    try {
+      await API.request('/api/me/recruiting', { method: 'PUT', body: JSON.stringify({ visible: $('rcd-visible').checked, cgpa: g('cgpa'), backlogs: g('backlogs'), subjects: g('subjects'), skills: g('skills') }) });
+    } catch (e) { recErr = e.message; render(); return; }
+    recDraft = null; recMsg = 'Saved ✓'; recStale = true; render();
+  } else if (act === 'acc' || act === 'dec') {
+    try { await API.request('/api/me/recruiting/requests/' + id + '/decide', { method: 'POST', body: JSON.stringify({ accept: act === 'acc' }) }); }
+    catch (e) { recErr = e.message; }
+    recStale = true; render();
+  }
+}
+
+// ----- My account: profile photo + password (student and staff) -----
+let acctMsg = { photo: '', pw: '' };
+
+// The photo the person chose themselves (kept for this session) wins over the one in the list
+function myPhotoValue(r) {
+  let v = null;
+  try { v = sessionStorage.getItem('cc_photo'); } catch (e) {}
+  return v !== null ? v : ((r && r.photo) || '');
+}
+
+function renderAccountSettings() {
+  if (getRole() !== 'student' && !isStaffRole()) return '';
+  const r = getRole() === 'student' ? myStudent() : myStaff();
+  return `<div class="ttcard frm acct"><h3>Profile photo</h3>` +
+    `<div class="pphoto"><div class="avatar big">${avatarInner(myPhotoValue(r), r ? r.name : (accountName() || userName()))}</div>` +
+    `<div class="pphoto-side"><div class="btns">` +
+      `<label class="btn ghost sm filebtn"><span>Choose photo</span><input id="myphoto" type="file" accept="image/*"></label>` +
+      `<button class="btn ghost sm" data-me="photorm" type="button">Remove photo</button></div></div></div>` +
+    `<div class="err" id="myphotoerr" role="alert"></div><div class="okmsg">${acctMsg.photo}</div>` +
+    `<h3 style="margin-top:16px">Change password</h3>` +
+    `<label for="pwcur">Current password</label><input id="pwcur" type="password" autocomplete="current-password">` +
+    `<label for="pwnew">New password</label><input id="pwnew" type="password" autocomplete="new-password" placeholder="At least 6 characters">` +
+    `<label for="pwnew2">Repeat new password</label><input id="pwnew2" type="password" autocomplete="new-password">` +
+    `<div class="err" id="pwerr" role="alert"></div><div class="okmsg">${acctMsg.pw}</div>` +
+    `<button class="btn sm" id="pwbtn" data-me="pwsave" type="button" style="margin-top:8px">Change password</button></div>`;
+}
+
+function handleMyPhoto(input) {
+  const err = $('myphotoerr');
+  cropPhoto(input.files && input.files[0], url => saveMyPhoto(url),
+    msg => { if (err) err.textContent = msg; input.value = ''; });
+}
+
+async function saveMyPhoto(url) {
+  try { await API.request('/api/me/photo', { method: 'PUT', body: JSON.stringify({ photo: url }) }); }
+  catch (e) { const b = $('myphotoerr'); if (b) b.textContent = e.message; return; }
+  try { sessionStorage.setItem('cc_photo', url); } catch (e) {}
+  acctMsg.photo = url ? 'Photo updated ✓' : 'Photo removed ✓';
+  render();
+}
+
+async function changeMyPassword() {
+  const cur = $('pwcur').value, n1 = $('pwnew').value, n2 = $('pwnew2').value, err = $('pwerr'), btn = $('pwbtn');
+  err.textContent = '';
+  if (!cur) { err.textContent = 'Enter your current password.'; return; }
+  if (n1.length < 6) { err.textContent = 'The new password must be at least 6 characters.'; return; }
+  if (n1 !== n2) { err.textContent = 'The two new passwords do not match.'; return; }
+  if (n1 === cur) { err.textContent = 'Choose a password different from the current one.'; return; }
+  btn.disabled = true;
+  let res;
+  try { res = await API.request('/api/me/password', { method: 'POST', body: JSON.stringify({ current_password: cur, new_password: n1 }) }); }
+  catch (e) { btn.disabled = false; err.textContent = e.message; return; }
+  if (res && res.token) { try { sessionStorage.setItem('cc_token', res.token); } catch (e) {} }   // stay signed in on this device
+  acctMsg.pw = 'Password changed ✓ Use the new password next time you sign in.';
+  render();
+}
+
+// ----- Academic resources (teachers upload, students download) -----
+let resList = null, resLoading = false, resMsg = '', resErr = '', resDel = '';
+const canUploadRes = () => ['faculty', 'hod', 'principal', 'admin'].includes(getRole());
+const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
+async function loadResources() {
+  if (resLoading) return;
+  resLoading = true;
+  try { resList = await API.request('/api/resources'); }
+  catch (e) { resList = []; resErr = e.message; }
+  resLoading = false;
+  render();
+}
+
+function renderResources() {
+  if (!hasTab('resources') || appData.tab !== 'resources') return '';
+  if (resList === null) { loadResources(); return '<h2>Resources</h2><p class="sub">Loading…</p>'; }
+  const msg = resMsg, error = resErr; resMsg = ''; resErr = '';
+  const role = getRole(), own = role === 'faculty' || role === 'hod';
+  const form = !canUploadRes() ? '' :
+    `<div class="ttcard frm"><b style="font-size:18px">Upload a resource</b>` +
+      `<label for="restl">Title</label><input id="restl" maxlength="120" placeholder="e.g. Unit 3 notes: Trees and Graphs">` +
+      `<div class="two"><div><label for="ressb">Subject</label><input id="ressb" maxlength="80" placeholder="e.g. Data Structures"></div>` +
+      `<div><label for="resse">Semester</label><input id="resse" maxlength="20" placeholder="e.g. Sem 3"></div></div>` +
+      (own ? `<p class="sub" style="margin:8px 0 0">Shared with students of your department.</p>`
+           : `<label for="resdp">Department (leave empty for all departments)</label><input id="resdp" maxlength="40" placeholder="e.g. CSE">`) +
+      `<label for="resds">Description (optional)</label><textarea id="resds" maxlength="400"></textarea>` +
+      `<label for="resfile">File (PDF, Word, PowerPoint, Excel, text, ZIP or image · max 15 MB)</label>` +
+      `<input id="resfile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.png,.jpg,.jpeg">` +
+      `<div class="err" id="reserr" role="alert"></div>` +
+      `<button class="btn" id="resup" data-res="up" type="button" style="width:100%">Upload</button></div>`;
+  return `<h2>Resources</h2><p class="sub">${canUploadRes() ? 'Share notes, slides and papers with students' : 'Notes, slides and papers shared by your teachers'} · ${resList.length} file${resList.length === 1 ? '' : 's'}</p>` +
+    successBox(msg) + (error ? `<div class="err" role="alert">${escapeHtml(error)}</div>` : '') + form +
+    `<div class="field" style="margin:12px 0"><input id="resq" type="search" placeholder="Search title, subject, teacher…" aria-label="Search resources"></div>` +
+    `<div class="list" id="reslist">` +
+    (resList.length ? resList.map(r =>
+      `<div class="item resrow" data-q="${escapeHtml((r.title + ' ' + r.subject + ' ' + r.by + ' ' + r.dept + ' ' + r.semester + ' ' + r.file).toLowerCase())}">` +
+        `<div class="top"><b>${escapeHtml(r.title)}</b></div>` +
+        `<div class="tags">${r.subject ? `<span class="badge">${escapeHtml(r.subject)}</span>` : ''}${r.semester ? `<span class="badge">${escapeHtml(r.semester)}</span>` : ''}` +
+          `<span class="badge">${r.dept ? escapeHtml(r.dept) : 'All departments'}</span></div>` +
+        (r.description ? `<p>${escapeHtml(r.description)}</p>` : '') +
+        `<p class="meta">${escapeHtml(r.file)} · ${fmtSize(r.size)} · ${escapeHtml(r.by)} · ${new Date(r.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>` +
+        `<div class="btns" style="margin-top:10px"><button class="btn sm" data-res="dl:${r.id}" type="button">⬇ Download</button>` +
+          (r.can_delete ? `<button class="btn ghost sm" data-res="rm:${r.id}" type="button">${resDel === String(r.id) ? 'Tap again to confirm' : 'Remove'}</button>` : '') +
+        `</div></div>`).join('') : '<p class="sub">Nothing has been shared yet.</p>') +
+    `</div><p class="sub snone hidden" id="resnone">No resource matches your search.</p>`;
+}
+
+function filterResources(q) {
+  q = q.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('#reslist .resrow').forEach(row => {
+    const ok = !q || q.split(/\s+/).every(t => row.dataset.q.includes(t));
+    row.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  const none = $('resnone');
+  if (none) none.classList.toggle('hidden', !q || shown > 0);
+}
+
+async function resourceAction(btn) {
+  const [act, id] = btn.dataset.res.split(':');
+  if (act === 'up') {
+    const file = $('resfile').files[0], title = $('restl').value.trim(), err = $('reserr');
+    err.textContent = '';
+    if (title.length < 3) { err.textContent = 'Give the resource a title.'; return; }
+    if (!file) { err.textContent = 'Choose a file to upload.'; return; }
+    if (file.size > 15 * 1024 * 1024) { err.textContent = 'That file is larger than 15 MB.'; return; }
+    const fd = new FormData();
+    fd.append('file', file); fd.append('title', title);
+    fd.append('subject', $('ressb').value.trim()); fd.append('semester', $('resse').value.trim());
+    fd.append('description', $('resds').value.trim());
+    fd.append('dept', $('resdp') ? $('resdp').value.trim() : '');
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try { await API.request('/api/resources', { method: 'POST', body: fd }); }
+    catch (e) { btn.disabled = false; btn.textContent = 'Upload'; err.textContent = e.message; return; }
+    resMsg = '✅ Uploaded. Students can download it now.';
+    resList = null; render();
+  } else if (act === 'dl') {
+    const r = (resList || []).find(x => String(x.id) === id), label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Downloading…';
+    try { await API.download('/api/resources/' + id + '/download', r ? r.file : 'resource'); }
+    catch (e) { resErr = e.message; render(); return; }
+    btn.disabled = false; btn.textContent = label;
+  } else if (act === 'rm') {
+    if (resDel !== id) { resDel = id; render(); return; }          // first tap asks, second tap removes
+    resDel = '';
+    try { await API.request('/api/resources/' + id, { method: 'DELETE' }); }
+    catch (e) { resErr = e.message; render(); return; }
+    resMsg = 'Resource removed.';
+    resList = null; render();
+  }
+}
+
+// ----- AI resume: generate, rate, suggest skills -----
+let rz = { form: { target: '', skills: '', projects: '', experience: '', cgpa: '', objective: '' }, busy: false, result: null, err: '' };
+
+const rzColor = n => n >= 70 ? '#2f7d6b' : n >= 40 ? '#c58a12' : '#b3261e';
+
+function resumeDocHtml(res, facts) {
+  const e = escapeHtml, r = res;
+  const contact = [facts.email, facts.phone].filter(Boolean).map(e).join(' · ');
+  const sec = (title, body) => body ? `<h4>${title}</h4>${body}` : '';
+  return `<h1>${e(facts.name || '')}</h1>` +
+    (r.headline ? `<div class="hd">${e(r.headline)}</div>` : '') + (contact ? `<div class="hd">${contact}</div>` : '') +
+    sec('Summary', r.summary ? `<p>${e(r.summary)}</p>` : '') +
+    sec('Education', r.education.map(x => `<p><b>${e(x.degree)}</b>${x.institution ? ', ' + e(x.institution) : ''}${x.period ? ' · ' + e(x.period) : ''}${x.details ? ' · ' + e(x.details) : ''}</p>`).join('')) +
+    sec('Skills', r.skills.length ? `<p>${r.skills.map(e).join(' · ')}</p>` : '') +
+    sec('Projects', r.projects.map(x => `<p><b>${e(x.name)}</b>${x.description ? ': ' + e(x.description) : ''}</p>`).join('')) +
+    sec('Experience', r.experience.map(x => `<p><b>${e([x.role, x.org].filter(Boolean).join(', '))}</b>${x.description ? (x.role || x.org ? ': ' : '') + e(x.description) : ''}</p>`).join('')) +
+    sec('Achievements', r.achievements.length ? `<ul>${r.achievements.map(a => `<li>${e(a)}</li>`).join('')}</ul>` : '');
+}
+
+function resumeText(res, facts) {
+  const r = res, L = [facts.name || '', r.headline, [facts.email, facts.phone].filter(Boolean).join(' · '), ''];
+  const add = (t, lines) => { if (lines.length) L.push(t.toUpperCase(), ...lines, ''); };
+  add('Summary', r.summary ? [r.summary] : []);
+  add('Education', r.education.map(x => [x.degree, x.institution, x.period, x.details].filter(Boolean).join(' · ')));
+  add('Skills', r.skills.length ? [r.skills.join(', ')] : []);
+  add('Projects', r.projects.map(x => x.name + (x.description ? ': ' + x.description : '')));
+  add('Experience', r.experience.map(x => [x.role, x.org].filter(Boolean).join(', ') + (x.description ? ': ' + x.description : '')));
+  add('Achievements', r.achievements.map(a => '- ' + a));
+  return L.join('\n').trim();
+}
+
+function renderResume() {
+  if (getRole() !== 'student') return '';
+  const f = rz.form;
+  const input = (key, label, ph, tag) => tag === 'ta'
+    ? `<label for="rz-${key}">${label}</label><textarea id="rz-${key}" data-rzf="${key}" maxlength="1500" placeholder="${ph}">${escapeHtml(f[key])}</textarea>`
+    : `<label for="rz-${key}">${label}</label><input id="rz-${key}" data-rzf="${key}" maxlength="100" placeholder="${ph}" value="${escapeHtml(f[key])}">`;
+  let out = `<h2>AI Resume</h2><p class="sub">Builds a resume from your profile and verified achievements, rates it and suggests skills to learn.</p>` +
+    `<div class="ttcard frm"><b style="font-size:18px">Tell us a little more</b>` +
+      `<p class="sub" style="margin:6px 0 0">Your name, course, batch and achievements are added automatically. Only real details are used, nothing is invented.</p>` +
+      input('target', 'Target role (optional)', 'e.g. Web developer, Data analyst') +
+      input('skills', 'Skills (separate with commas)', 'e.g. Python, HTML, CSS, SQL') +
+      input('cgpa', 'CGPA (optional)', 'e.g. 8.2') +
+      input('objective', 'Career objective (optional, one line)', 'What are you looking for?') +
+      input('projects', 'Projects (one per line, “Name: what you built and used”)', 'Attendance app: built with Java and SQLite for 60 students', 'ta') +
+      input('experience', 'Internships / training / club roles (one per line)', 'e.g. Web intern at ABC, 2 months', 'ta') +
+      (rz.err ? `<div class="err" role="alert">${escapeHtml(rz.err)}</div>` : '') +
+      `<button class="btn" data-rz="gen" type="button" style="width:100%" ${rz.busy ? 'disabled aria-busy="true"' : ''}>${rz.busy ? 'Generating… this can take up to a minute' : rz.result ? '✨ Generate again' : '✨ Generate my resume'}</button></div>`;
+  const d = rz.result;
+  if (!d) return out;
+  const g = d.rating, color = rzColor(g.score);
+  out += (d.note ? `<div class="note" style="margin:14px 0">${escapeHtml(d.note)}</div>` : '') +
+    `<div class="ttcard" style="margin-top:14px"><b style="font-size:18px">Resume score</b>` +
+      `<div class="rzscore" style="--rzc:${color}"><div class="ring" style="--p:${g.score}"><b>${g.score}</b></div>` +
+      `<div><b>Grade ${escapeHtml(g.grade)}</b><p class="sub" style="margin:4px 0 0">${escapeHtml(g.summary)}</p></div></div>` +
+      g.breakdown.map(b => `<div class="rzbar" style="--rzc:${rzColor(b.score * 10)}"><span>${escapeHtml(b.area)}</span><i><span style="width:${b.score * 10}%"></span></i><b>${b.score}/10</b></div>` +
+        (b.comment ? `<p class="sub" style="margin:0 0 4px;font-size:12.5px">${escapeHtml(b.comment)}</p>` : '')).join('') +
+      (g.strengths.length ? `<h4 style="margin:12px 0 2px">Strengths</h4><ul class="rzlist">${g.strengths.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '') +
+      (g.improvements.length ? `<h4 style="margin:12px 0 2px">How to improve</h4><ul class="rzlist">${g.improvements.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '') +
+    `</div>` +
+    (d.skills_to_learn.length ? `<h3 style="margin:18px 0 8px">Skills to learn next</h3><div class="list">` +
+      d.skills_to_learn.map((x, i) => `<div class="item"><div class="top"><b>${i + 1}. ${escapeHtml(x.skill)}</b></div>` +
+        (x.why ? `<p>${escapeHtml(x.why)}</p>` : '') + (x.how ? `<p><b>Start:</b> ${escapeHtml(x.how)}</p>` : '') + `</div>`).join('') + `</div>` : '') +
+    `<h3 style="margin:18px 0 8px">Your resume</h3><div class="rzdoc" id="rzdoc">${resumeDocHtml(d.resume, d.facts)}</div>` +
+    `<div class="btns" style="margin-top:12px"><button class="btn sm" data-rz="print" type="button">Print / Save as PDF</button>` +
+    `<button class="btn ghost sm" data-rz="copy" type="button">Copy text</button></div>`;
+  return out;
+}
+
+async function resumeAction(btn) {
+  const act = btn.dataset.rz;
+  if (act === 'gen') {
+    if (rz.busy) return;
+    const f = rz.form;
+    rz.busy = true; rz.err = ''; render();
+    try {
+      rz.result = await API.request('/api/resume', { method: 'POST', body: JSON.stringify({
+        target_role: f.target, skills: f.skills, projects: f.projects, experience: f.experience, cgpa: f.cgpa, objective: f.objective }) });
+    } catch (e) { rz.err = e.message; }
+    rz.busy = false; render();
+    const doc = $('rzdoc');
+    if (doc && rz.result) doc.closest('.pg').querySelector('.rzscore').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else if (act === 'print' && rz.result) {
+    const w = window.open('', '_blank');
+    if (!w) { rz.err = 'Allow pop-ups for this site to print or save the resume.'; render(); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Resume</title><style>' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#111;max-width:760px;margin:24px auto;padding:0 20px;line-height:1.45;font-size:14px}' +
+      'h1{font-size:26px;margin:0}.hd{color:#555;margin:2px 0 6px}h4{margin:16px 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #bbb;padding-bottom:2px}' +
+      'p{margin:3px 0}ul{margin:3px 0;padding-left:18px}</style></head><body>' + resumeDocHtml(rz.result.resume, rz.result.facts) + '</body></html>');
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+  } else if (act === 'copy' && rz.result && navigator.clipboard) {
+    navigator.clipboard.writeText(resumeText(rz.result.resume, rz.result.facts)).then(() => {
+      btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = 'Copy text'; }, 1500); }, () => {});
+  }
+}
+
 // Build stamp shown in the page footer. If you do not see it there, the browser is still using an old script.js.
-const BUILD = 'build 07-Oct-d';
+const BUILD = 'build 08-Oct-g';
 document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('build')) f.append(' · ' + BUILD); });
 
 /* =============================================================================
@@ -3921,7 +4508,7 @@ document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd';   // [data-acc] and #accadd = Accounts page buttons
+const CLICKABLE = '[data-go],[data-pay],[data-ap],[data-nf],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-me],[data-res],[data-rz],[data-rc],[data-po],[data-rec]';   // [data-acc] and #accadd = Accounts page buttons
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -4084,6 +4671,14 @@ document.addEventListener('click', e => {
   }
   else if (t.dataset.mskip) { mealSkips[t.dataset.mskip] = !mealSkips[t.dataset.mskip]; render(); }
   else if (t.hasAttribute('data-print')) window.print();
+
+  // ----- My account (photo / password), Resources, AI resume -----
+  else if (t.dataset.me) { if (t.dataset.me === 'photorm') saveMyPhoto(''); else if (t.dataset.me === 'pwsave') changeMyPassword(); }
+  else if (t.dataset.res) resourceAction(t);
+  else if (t.dataset.rz) resumeAction(t);
+  else if (t.dataset.rc) rcAction(t);
+  else if (t.dataset.po) poAction(t);
+  else if (t.dataset.rec) recAction(t);
 });
 
 
@@ -4128,7 +4723,7 @@ function dismissNotifs(ids) {
 
 // Closed complaints this person cares about: students their own, staff all of them
 const relevantClosures = () => getRole() === 'admin' ? [] :
-  COMPLAINTS.filter(c => c.closed && (getRole() === 'staff' || isMine(c)));
+  COMPLAINTS.filter(c => c.closed && (isStaffRole() || isMine(c)));
 const unseenClosures = () => {
   const seen = new Set(loadJson('cc_cseen', {})[personKey()] || []);
   return relevantClosures().filter(c => !seen.has(closeKey(c)));
@@ -4154,7 +4749,7 @@ function buildNotifications() {
 
   if (role === 'admin') {
     leaveRequests.staff.filter(r => r.id && r.s === 'Pending').forEach(r => out.push(waiting(r, 'ar:', 'Staff leave request')));
-  } else if (role === 'staff') {
+  } else if (isStaffRole()) {
     studentApprovals.filter(r => r.id && r.s === 'Pending').forEach(r => out.push(waiting(r, 'sr:', 'Leave request to review')));
     leaveRequests.staff.filter(r => r.id && isMyLeave(r) && r.s !== 'Pending').forEach(r => out.push(decided(r)));
   } else {
@@ -4434,8 +5029,12 @@ function signIn() {
     try {
       sessionStorage.setItem('cc_in', '1');
       sessionStorage.setItem('cc_role', data.role);
+      sessionStorage.setItem('cc_dept', data.dept || '');
+      sessionStorage.setItem('cc_hostel', data.hostel || '');
       const who = data.login_id || user;
       if (data.name) sessionStorage.setItem('cc_name', data.name);
+      sessionStorage.removeItem('cc_photo');
+      if (data.photo) sessionStorage.setItem('cc_photo', data.photo);
       sessionStorage.setItem('cc_user', who.includes('@') ? who.split('@')[0] : who);
     } catch (e) {}
     // reload so the app starts with the server data (a little later when the guard is greeting)
