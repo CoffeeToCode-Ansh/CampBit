@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261009j">
 </head>
 <body>
 
@@ -29,11 +29,11 @@
   <div class="phone" id="phoneBox" data-role="student"><div class="screen" id="scr"><div class="scr-in" id="scrIn">
    <div class="status"><span id="clock">9:41</span><span>● ● ▮</span></div>
    <div id="formPane" style="display:flex;flex-direction:column;gap:12px">
-    <div class="logo" id="roleLogo">🎓</div>
+    <div class="logo" id="roleLogo" title="Role icon"><span class="logo-emoji">🎓</span></div>
     <h2 class="brand-font">Campbit</h2><p>Your campus, in your pocket</p>
     <h2 id="greet" style="margin-top:8px">Welcome back</h2><p id="roleHint">Sign in as a student</p>
     <div class="seg" id="seg" role="tablist"><button type="button" class="on" data-role="student">Student</button>
-    <button type="button" data-role="staff">Staff</button><button type="button" data-role="admin">Admin</button></div>
+    <button type="button" data-role="staff">Staff</button><button type="button" data-role="admin">Admin</button><button type="button" data-role="guest">Guest</button></div>
     <div class="field"><input id="user" placeholder="Roll number or email" autocomplete="username" aria-label="Roll number or email"></div>
     <div class="field"><input id="pass" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
     <button type="button" class="show" id="toggle">SHOW</button></div>
@@ -48,18 +48,22 @@
     <div class="tick">✓</div><h2>You're signed in</h2><p>Welcome to Campbit.</p>
    </div>
   </div></div></div>
-  <div class="mascot" aria-hidden="true"><img src="guard.webp" alt="" width="190" height="450" decoding="async" draggable="false"></div>
+  <div class="mascot" aria-hidden="true"><span class="hello"></span><img class="guard" src="guard.webp" alt="" width="190" height="450" decoding="async" draggable="false"><div class="pose"><img class="guard-wave" src="guard-wave.webp" alt="" decoding="async" draggable="false"><img class="guard-hand" src="guard-hand.webp" alt="" decoding="async" draggable="false"></div><span class="wave-hand">👋</span></div>
  </main>
 </div>
 
 <!-- SITE (visible only after login) -->
 <div id="siteView" class="hidden">
- <header class="bar"><div class="hl"><div class="kb">
+ <header class="bar"><div class="hl"><button class="btn ghost sm hamb" id="hamb" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span class="hbars" aria-hidden="true"><i></i><i></i><i></i></span></button><div class="kb">
 <button class="btn ghost sm kbtn" data-kb type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false">⋮</button>
 <div class="menu" role="menu"><button role="menuitem" data-sheet="about" type="button"><span aria-hidden="true">ℹ️</span> About us</button>
 <button role="menuitem" data-sheet="complaint" type="button"><span aria-hidden="true">📝</span> Complaint box</button>
 <button role="menuitem" data-sheet="issue" type="button"><span aria-hidden="true">🐞</span> Report an issue</button>
+<button role="menuitem" data-sheet="sos" type="button"><span aria-hidden="true">🚨</span> Emergency SOS &amp; Helpline</button>
 </div></div><a class="brand" href="#" data-go="home">🎓 Campbit</a></div>
+<div class="gsearch" id="gsearch" role="search"><span class="gicon" aria-hidden="true">🔍</span>
+<input id="gq" type="search" placeholder="Search pages, notices, results…" autocomplete="off" enterkeyhint="search" aria-label="Search Campbit" aria-controls="gres" aria-expanded="false" aria-autocomplete="list">
+<kbd class="gkey" aria-hidden="true">/</kbd><div class="gres" id="gres" role="listbox" hidden></div></div>
 <div class="hr"><select class="langsel" aria-label="Language"><option value="en">English</option>
 <option value="hi">हिन्दी</option><option value="or">ଓଡ଼ିଆ</option></select>
 <button class="btn ghost sm themebtn" data-tt type="button" aria-label="Toggle light or dark mode" title="Toggle light / dark">🌙</button>
@@ -69,7 +73,9 @@
  <main class="wrap">
   <section class="pg" id="pg-home"></section>
   <section class="pg hidden" id="pg-timetable"></section>
+  <section class="pg hidden" id="pg-classes"></section>
   <section class="pg hidden" id="pg-attendance"></section>
+  <section class="pg hidden" id="pg-exams"></section>
   <section class="pg hidden" id="pg-results"></section>
   <section class="pg hidden" id="pg-fees"></section>
   <section class="pg hidden" id="pg-opps"></section>
@@ -81,12 +87,16 @@
   <section class="pg hidden" id="pg-achievements"></section>
   <section class="pg hidden" id="pg-notices"></section>
   <section class="pg hidden" id="pg-holidays"></section>
-  <section class="pg hidden" id="pg-scholarships"></section>
   <section class="pg hidden" id="pg-leave"></section>
+  <section class="pg hidden" id="pg-events"></section>
+  <section class="pg hidden" id="pg-resources"></section>
+  <section class="pg hidden" id="pg-recruit"></section>
   <section class="pg hidden" id="pg-profile"></section>
  </main>
  <footer>© 2026 Campbit · Demo data for preview only.</footer>
 </div>
+
+<button class="floating-sos-btn" data-sheet="sos" type="button" aria-label="Campus Emergency SOS" title="Campus Emergency SOS"><span class="sos-pulse-ring"></span>🚨 <span class="sos-label">SOS</span></button>
 
 <div id="sheet" class="sheet hidden"><div class="sback" data-close></div>
 <div class="spanel" role="dialog" aria-modal="true" aria-label="Details">
@@ -94,7 +104,23 @@
 <button class="sx" data-close type="button" aria-label="Close">✕</button>
 <div id="sbody"></div></div></div>
 
-<script src="api.js"></script>
-<script src="script.js"></script>
+<!-- Student menu (opened by the hamburger button) -->
+<div id="drawer" class="drawer" aria-hidden="true" inert><div class="dback" data-dclose></div>
+<nav class="dpanel" aria-label="Main menu">
+<div class="dhead"><img class="dlogo" src="logo.png" alt="" width="46" height="34" decoding="async"><b class="brand-font">Campbit</b></div>
+<div class="dwho" id="dwho"></div>
+<div class="dlabel">Menu</div>
+<div class="dlinks" id="dlinks"></div>
+</nav></div>
+
+<script src="api.js?v=20261009j"></script>
+<script src="script.js?v=20261009j"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  });
+}
+</script>
 </body>
 </html>

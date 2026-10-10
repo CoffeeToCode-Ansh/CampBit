@@ -1,7 +1,35 @@
+# Python cache
 __pycache__/
-*.pyc
-app.db
-.secret
-uploads/
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Secrets and environment configs
 .env
+.secret
+
+# Local SQLite databases
+app.db
+campbit.db
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# User uploads & academic resources
+uploads/*
+!uploads/.gitkeep
+resource_files/*
+!resource_files/.gitkeep
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/
+*.code-workspace
