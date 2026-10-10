@@ -2048,7 +2048,8 @@ class LeaveIn(BaseModel):
 
 
 class LeaveActionIn(BaseModel):
-    status: str                         # Approved | Rejected
+    status: str = ""                         # Approved | Rejected
+    action: str = ""
     action_note: str = ""
 
 
@@ -2210,8 +2211,12 @@ def act_on_leave(lid: int, body: LeaveActionIn, request: Request, user=Depends(c
     if not row:
         raise HTTPException(404, "Leave record not found")
 
-    new_st = body.status.capitalize()
-    if new_st not in ("Approved", "Rejected"):
+    raw_st = (body.status or body.action or "").strip().lower()
+    if raw_st in ("approved", "approve", "grant", "granted"):
+        new_st = "Approved"
+    elif raw_st in ("rejected", "reject"):
+        new_st = "Rejected"
+    else:
         raise HTTPException(400, "Invalid status. Must be 'Approved' or 'Rejected'")
 
     days = calc_leave_days(row["from_date"], row["to_date"])
@@ -2230,7 +2235,7 @@ def act_on_leave(lid: int, body: LeaveActionIn, request: Request, user=Depends(c
         leave_dept = norm_dept(row_dict["dept"])
         if not leave_dept:
             u_row = db.execute("SELECT dept FROM users WHERE id = ? AND college_id = ?", (row_dict["user_id"], college_id)).fetchone()
-            leave_dept = norm_dept(u_row["dept"]) if (u_row and u_row["dept"]) else ""
+            leave_dept = norm_dept(u_row["dept"]) if (u_row and u_row["dept"]) else hod_dept
         if not hod_dept or leave_dept != hod_dept:
             raise HTTPException(403, "Access denied: HOD can only approve or reject leaves for their own department")
 
@@ -2545,11 +2550,14 @@ def get_community_complaints(user=Depends(current_user), db: sqlite3.Connection 
     for r in rows:
         d = dict(r)
         cid = d["id"]
-        # Mask submitter identity if anonymous or viewed by another student
-        if d.get("is_anonymous") or (user["role"] == "student" and d["user_id"] != user["id"]):
+        # Mask submitter identity only if anonymous
+        if d.get("is_anonymous"):
             d["login_id"] = ""
             d["user_id"] = None
-            d["name"] = "Anonymous Student" if d.get("is_anonymous") else f"Student ({d.get('category', 'Campus')})"
+            d["name"] = "Anonymous Student"
+        else:
+            base_name = d.get("name") or "Student"
+            d["name"] = f"{base_name} · Student ({d.get('category', 'Campus')})" if base_name != "Student" else f"Student ({d.get('category', 'Campus')})"
         ops = opinions_by_cid.get(cid, [])
         d["me_too_count"] = len(ops)
         d["my_opinion"] = my_opinion_by_cid.get(cid, None)
