@@ -870,6 +870,15 @@ def init_db(password_hasher_fn=None):
             conn.execute("RESET lock_timeout")
             conn.execute("RESET statement_timeout")
             conn.commit()
+            # Re-sync ID counters so INSERTs never collide with existing rows
+            for tbl in ("users", "audit_logs", "leaves", "complaints", "achievements",
+                        "attendance_sessions", "attendance", "requests", "contact_requests",
+                        "resources", "issues", "certificates", "timetable_adjustments"):
+                conn.execute(
+                    f"SELECT setval(pg_get_serial_sequence('{tbl}','id'), "
+                    f"COALESCE((SELECT MAX(id) FROM {tbl}),0)+1, false)"
+                )
+            conn.commit()
             print("[init_db] PostgreSQL schema ready", flush=True)
 
             # Seed admin if users table is empty
