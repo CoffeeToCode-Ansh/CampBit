@@ -444,6 +444,18 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE(session_id, student_id)
 );
 
+CREATE TABLE IF NOT EXISTS complaint_opinions (
+    id SERIAL PRIMARY KEY,
+    college_id TEXT NOT NULL DEFAULT 'BPUT',
+    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    login_id TEXT NOT NULL DEFAULT '',
+    user_name TEXT NOT NULL DEFAULT '',
+    opinion TEXT NOT NULL DEFAULT 'Me Too',
+    created_at TEXT NOT NULL,
+    UNIQUE (complaint_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     college_id TEXT NOT NULL DEFAULT 'BPUT',
