@@ -357,12 +357,14 @@ def merge_notices(old, new, user):
     if user["role"] in ("principal", "admin") or not isinstance(new, list):
         return new
     seen_old = {json.dumps(n, sort_keys=True) for n in (old or [])}
-    seen_new = {json.dumps(n, sort_keys=True) for n in new}
-    added = [n for n in new if json.dumps(n, sort_keys=True) not in seen_old]
-    removed = [n for n in (old or []) if json.dumps(n, sort_keys=True) not in seen_new]
-    if any(not notice_postable(n, user) for n in added + removed):
-        raise HTTPException(403, "You can only post or change notices for your own department / hostel")
-    return new
+    for n in new:
+        if json.dumps(n, sort_keys=True) not in seen_old:
+            if not notice_postable(n, user):
+                raise HTTPException(403, "You can only post or change notices for your own department / hostel")
+    keep = [n for n in (old or []) if not notice_postable(n, user)]
+    mine = [n for n in new if notice_postable(n, user)]
+    return mine + keep
+
 
 
 def viewer_scope(user, raw: dict):
@@ -1183,7 +1185,7 @@ async def upload_resource(
     )
     new_rid = cur.lastrowid
     log_audit(db, "RESOURCE_UPLOAD", "resource", new_rid, {"title": title, "size": len(data), "dept": dept}, user=user, ip_address=get_client_ip(request))
-    return {"ok": True}
+    return {"ok": True, "id": new_rid}
 
 
 def get_visible_resource(db, rid: int, user):
