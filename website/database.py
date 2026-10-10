@@ -107,7 +107,7 @@ def translate_query_for_postgres(sql: str) -> Tuple[str, bool]:
             "users", "resources", "contact_requests", "requests",
             "leaves", "achievements", "complaints", "issues",
             "attendance_sessions", "attendance", "audit_logs",
-            "certificates", "timetable_adjustments"
+            "certificates", "timetable_adjustments", "complaint_opinions"
         }
         if table in tables_with_serial_id and "returning" not in translated.lower():
             translated = translated.rstrip(";") + " RETURNING id"
@@ -318,7 +318,8 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT
+    student_at TEXT,
+    student_note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -445,7 +446,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 CREATE TABLE IF NOT EXISTS complaint_opinions (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     college_id TEXT NOT NULL DEFAULT 'BPUT',
     complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -615,7 +616,8 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT
+    student_at TEXT,
+    student_note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -739,6 +741,18 @@ CREATE TABLE IF NOT EXISTS attendance (
     marked_at TEXT NOT NULL,
     client_uuid TEXT,
     UNIQUE(session_id, student_id)
+);
+
+CREATE TABLE IF NOT EXISTS complaint_opinions (
+    id SERIAL PRIMARY KEY,
+    college_id TEXT NOT NULL DEFAULT 'BPUT',
+    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    login_id TEXT NOT NULL DEFAULT '',
+    user_name TEXT NOT NULL DEFAULT '',
+    opinion TEXT NOT NULL DEFAULT 'Me Too',
+    created_at TEXT NOT NULL,
+    UNIQUE (complaint_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -870,6 +884,7 @@ def init_db(password_hasher_fn=None):
                 conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_def}")
             conn.execute("ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS client_uuid TEXT")
             conn.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS client_uuid TEXT")
+            conn.execute("ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS student_note TEXT")
             conn.commit()
         
             print("[init_db] column migrations done, creating indexes...", flush=True)
@@ -896,7 +911,7 @@ def init_db(password_hasher_fn=None):
             # Re-sync ID counters so INSERTs never collide with existing rows
             for tbl in ("users", "audit_logs", "leaves", "complaints", "achievements",
                         "attendance_sessions", "attendance", "requests", "contact_requests",
-                        "resources", "issues", "certificates", "timetable_adjustments"):
+                        "resources", "issues", "certificates", "timetable_adjustments", "complaint_opinions"):
                 conn.execute(
                     f"SELECT setval(pg_get_serial_sequence('{tbl}','id'), "
                     f"COALESCE((SELECT MAX(id) FROM {tbl}),0)+1, false)"
@@ -937,6 +952,13 @@ def init_db(password_hasher_fn=None):
                 lcols = [r[1] for r in conn.execute("PRAGMA table_info(leaves)").fetchall()]
                 if lcols and "stage" not in lcols:
                     conn.execute("ALTER TABLE leaves ADD COLUMN stage TEXT NOT NULL DEFAULT 'Pending'")
+            except Exception:
+                pass
+
+            try:
+                ccols = [r[1] for r in conn.execute("PRAGMA table_info(contact_requests)").fetchall()]
+                if ccols and "student_note" not in ccols:
+                    conn.execute("ALTER TABLE contact_requests ADD COLUMN student_note TEXT")
             except Exception:
                 pass
 
