@@ -5404,8 +5404,24 @@ async function loadCommunityComplaints() {
     console.warn('Community complaints error:', e);
   } finally {
     communityLoading = false;
-    if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+    refreshComplaintsView();
   }
+}
+
+function refreshComplaintsView() {
+  const pgc = $('pg-complaints');
+  if (!pgc) return;
+  const role = getRole();
+  if (role === 'admin') {
+    pgc.innerHTML = renderAdminComplaints();
+  } else if (role === 'warden') {
+    pgc.innerHTML = renderWardenComplaints();
+  } else if (isStaffRole()) {
+    pgc.innerHTML = renderStaffComplaints();
+  } else {
+    pgc.innerHTML = renderComplaints();
+  }
+  translatePage(pgc);
 }
 
 async function toggleComplaintOpinion(cid, defaultOpinion = 'Me Too') {
@@ -5434,7 +5450,7 @@ async function toggleComplaintOpinion(cid, defaultOpinion = 'Me Too') {
   } catch (e) {
     showToast('Updated opinion');
   }
-  if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+  refreshComplaintsView();
 }
 
 async function submitCustomComplaintOpinion(cid) {
@@ -5458,11 +5474,11 @@ async function submitCustomComplaintOpinion(cid) {
   } catch (e) {
     showToast('Posted opinion');
   }
-  if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+  refreshComplaintsView();
 }
 
 function renderComplaints() {
-  if (!communityComplaints.length && !communityLoading && typeof API !== 'undefined' && API.getCommunityComplaints) {
+  if (!communityComplaints.length && !communityLoading && typeof API !== 'undefined' && API.getCommunityComplaints && getRole() === 'student') {
     loadCommunityComplaints();
   }
   const message = complaintMessage; complaintMessage = '';
@@ -5510,12 +5526,12 @@ function renderComplaints() {
     return cat.includes(filterCat) || filterCat.includes(cat);
   });
 
-  return `<h2>Complaints &amp; Grievances</h2><p class="sub">Hostel, college and mess issues · Review fellow students' complaints, express opinions &amp; say "Me Too"</p>` +
-    (message ? `<div class="item" style="margin-bottom:14px;border-color:#15803d">${message}</div>` : '') +
+  // Complaint Filing Box: EXCLUSIVELY for students. Admin & Staff NEVER see this filing box.
+  const isStudent = getRole() === 'student';
+  const filingBoxHtml = isStudent ? (
     (!isHostelStudent
       ? `<div class="note" style="margin-bottom:14px;background:rgba(234,179,8,0.12);border-color:#ca8a04;color:#a16207"><b>ℹ️ Day Scholar Notice:</b> You are registered as a Day Scholar. Complaints regarding <b>Hostel, Food &amp; Mess, and Cleanliness</b> are exclusively reserved for students residing in the hostel. You can file complaints under <b>College</b>.</div>`
       : '') +
-    // --- Form ---
     `<div class="ttcard frm"><b style="font-size:18px">Raise a complaint</b>` +
     `<div class="two">` +
     `<div><label for="cfcat">Category</label><select id="cfcat">${COMPLAINT_CATEGORIES.map(c => {
@@ -5545,7 +5561,12 @@ function renderComplaints() {
     `<div class="note" style="margin-top:12px">⏱ Every complaint gets action within <b>7 days at most</b>.</div>` +
     `<div class="err" id="cferr" role="alert"></div>` +
     `<button class="btn" id="cfsub" type="button" style="width:100%">Submit complaint</button>${duplicatePrompt}` +
-    `</div>` +
+    `</div>`
+  ) : '';
+
+  return `<h2>Complaints &amp; Grievances</h2><p class="sub">Hostel, college and mess issues · Review fellow students' complaints, express opinions &amp; say "Me Too"</p>` +
+    (message ? `<div class="item" style="margin-bottom:14px;border-color:#15803d">${message}</div>` : '') +
+    filingBoxHtml +
     // --- Campus Community Complaints & Opinions ---
     `<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 4px;flex-wrap:wrap;gap:8px">` +
     `<h3 style="margin:0">🏛️ Campus Complaints &amp; Peer Grievances</h3>` +
@@ -7870,6 +7891,7 @@ function renderAdminComplaints() {
       (c.st < 3
         ? `<button class="btn sm" data-adv="${i}" type="button">Mark as ${STAGES[c.st + 1]} ▶</button>` +
         `<button class="btn ghost sm" data-act="clo:${i}" type="button">Close with reason</button>` : '') +
+      `<button class="btn ghost sm" data-cdel="${c.id || i}" type="button" style="color:#ef4444;border-color:rgba(239,68,68,0.3)">🗑️ Remove</button>` +
       `</div>` +
       // "Close with reason" form (only for the complaint being closed)
       (closingComplaint === i
@@ -7880,6 +7902,34 @@ function renderAdminComplaints() {
         : '') +
       `</div>`
     ).join('') + '</div>';
+}
+
+async function removeComplaintByAdmin(cid) {
+  try {
+    if (typeof API !== 'undefined' && API.deleteComplaint) {
+      await API.deleteComplaint(cid);
+    }
+    const idx = COMPLAINTS.findIndex(c => String(c.id) === String(cid));
+    if (idx !== -1) {
+      COMPLAINTS.splice(idx, 1);
+      saveComplaints();
+    }
+    const commIdx = communityComplaints.findIndex(c => String(c.id) === String(cid));
+    if (commIdx !== -1) {
+      communityComplaints.splice(commIdx, 1);
+    }
+    showToast('Complaint removed ✓');
+    refreshComplaintsView();
+  } catch (err) {
+    console.warn('Delete complaint error:', err);
+    const idx = COMPLAINTS.findIndex(c => String(c.id) === String(cid));
+    if (idx !== -1) {
+      COMPLAINTS.splice(idx, 1);
+      saveComplaints();
+    }
+    showToast('Complaint removed ✓');
+    refreshComplaintsView();
+  }
 }
 
 // Staff view of complaints (read-only): progress and closing reasons
@@ -10721,7 +10771,7 @@ function render() {
   // Background server synchronization for active student and review pages
   if (appData.tab === 'leave' && !studentLeavesLoading) loadStudentLeavesFromServer();
   if (appData.tab === 'achievements' && !achievementsLoading) loadAchievementsFromServer();
-  if (appData.tab === 'complaints' && !communityLoading) loadCommunityComplaints();
+  if (appData.tab === 'complaints' && !communityLoading && getRole() === 'student') loadCommunityComplaints();
 
   if (role === 'admin') {
     $('pg-home').innerHTML = renderAdminHome();
@@ -10864,7 +10914,7 @@ function goToTab(name, dir, mode) {   // mode: 'back' (from the Back button) | '
   // Fresh server synchronization for active section
   if (name === 'leave') loadStudentLeavesFromServer();
   else if (name === 'achievements') loadAchievementsFromServer();
-  else if (name === 'complaints') loadCommunityComplaints();
+  else if (name === 'complaints' && getRole() === 'student') loadCommunityComplaints();
 
   // Universal DROP-DOWN effect when switching tabs everywhere
   triggerTabDropDown();
@@ -11735,7 +11785,7 @@ document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn,[data-preset],[data-cmp-metoo],[data-cmp-quick],[data-cmp-post],[data-cmp-filter]';
+const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn,[data-preset],[data-cmp-metoo],[data-cmp-quick],[data-cmp-post],[data-cmp-filter],[data-cdel]';
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -11924,7 +11974,13 @@ document.addEventListener('click', e => {
   // ----- Complaints & Presets -----
   else if (t.dataset.cmpFilter) {
     communityComplaintFilter = t.dataset.cmpFilter;
-    if ($('pg-complaints')) $('pg-complaints').innerHTML = renderComplaints();
+    refreshComplaintsView();
+  }
+  else if (t.dataset.cdel) {
+    const cid = t.dataset.cdel;
+    if (confirm('Are you sure you want to remove this complaint from the system?')) {
+      removeComplaintByAdmin(cid);
+    }
   }
   else if (t.dataset.adv) advanceComplaint(+t.dataset.adv);
   else if (t.dataset.metoo) meToo(+t.dataset.metoo);
