@@ -2408,6 +2408,7 @@ class AchievementVerifyIn(BaseModel):
 
 
 @app.post("/api/achievements/{aid}/verify")
+@app.put("/api/achievements/{aid}/verify")
 def verify_achievement(aid: int, request: Request, body: Optional[AchievementVerifyIn] = None, user=Depends(require_roles("faculty", "hod", "principal", "admin")), db: sqlite3.Connection = Depends(get_db)):
     college_id = user.get("college_id", "BPUT")
     row = db.execute("SELECT * FROM achievements WHERE id = ? AND college_id = ?", (aid, college_id)).fetchone()
@@ -2560,6 +2561,8 @@ def get_community_complaints(user=Depends(current_user), db: sqlite3.Connection 
             d["name"] = f"{base_name} · Student ({d.get('category', 'Campus')})" if base_name != "Student" else f"Student ({d.get('category', 'Campus')})"
         ops = opinions_by_cid.get(cid, [])
         d["me_too_count"] = len(ops)
+        d["opinion_count"] = len(ops)
+        d["submitter"] = d["name"]
         d["my_opinion"] = my_opinion_by_cid.get(cid, None)
         d["opinions"] = ops[:5]
         out.append(d)
@@ -2586,7 +2589,7 @@ def add_complaint_opinion(cid: int, body: OpinionIn, request: Request, user=Depe
     )
     count = db.execute("SELECT COUNT(*) FROM complaint_opinions WHERE college_id = ? AND complaint_id = ?", (college_id, cid)).fetchone()[0]
     log_audit(db, "COMPLAINT_OPINION", "complaint", cid, {"opinion": opinion_text}, user=user, ip_address=get_client_ip(request))
-    return {"ok": True, "me_too_count": count, "opinion": opinion_text}
+    return {"ok": True, "me_too_count": count, "opinion_count": count, "opinion": opinion_text}
 
 
 @app.delete("/api/complaints/{cid}/opinion")

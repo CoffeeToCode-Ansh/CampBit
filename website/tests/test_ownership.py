@@ -107,6 +107,24 @@ class TestOwnershipSecurity(unittest.TestCase):
         self.assertEqual(res_iss.status_code, 200, res_iss.text)
         self.iss_a_id = res_iss.json()["issue"]["id"]
 
+    def tearDown(self):
+        try:
+            self.client.delete(f"/api/leaves/{self.leave_a_id}", headers=self.headers_a)
+        except Exception:
+            pass
+        try:
+            self.client.delete(f"/api/achievements/{self.ach_a_id}", headers=self.headers_a)
+        except Exception:
+            pass
+        try:
+            self.client.delete(f"/api/complaints/{self.comp_a_id}", headers=self.headers_a)
+        except Exception:
+            pass
+        try:
+            self.client.delete(f"/api/issues/{self.iss_a_id}", headers=self.headers_a)
+        except Exception:
+            pass
+
     # --- LEAVE OWNERSHIP TESTS ---
     def test_student_b_cannot_read_student_a_leave(self):
         res = self.client.get(f"/api/leaves/{self.leave_a_id}", headers=self.headers_b)
