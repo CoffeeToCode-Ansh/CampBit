@@ -152,6 +152,9 @@
 
     // 3. Complaints
     async getComplaints() { return request('/api/complaints'); },
+    async getCommunityComplaints() { return request('/api/complaints/community'); },
+    async addComplaintOpinion(id, opinion = 'Me Too') { return request('/api/complaints/' + encodeURIComponent(id) + '/opinion', { method: 'POST', body: JSON.stringify({ opinion }) }); },
+    async deleteComplaintOpinion(id) { return request('/api/complaints/' + encodeURIComponent(id) + '/opinion', { method: 'DELETE' }); },
     async createComplaint(data) { return request('/api/complaints', { method: 'POST', body: JSON.stringify(data) }); },
     async getComplaint(id) { return request('/api/complaints/' + encodeURIComponent(id)); },
     async updateComplaint(id, data) { return request('/api/complaints/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(data) }); },
