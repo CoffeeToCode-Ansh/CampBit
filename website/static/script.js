@@ -1328,7 +1328,7 @@ function loadHodDashboardData() {
       hodLeavesList = [];
     }).finally(() => {
       hodLeavesLoading = false;
-      if (getRole() === 'hod' && appData.tab === 'home') refreshHodHome();
+      if (getRole() === 'hod') refreshHodHome();
     });
   }
 
@@ -1733,7 +1733,7 @@ function renderHODHome() {
         <div class="db-quick-bar">
           <span class="db-quick-label">Department Actions:</span>
           <div class="db-quick-chips">
-            <button class="db-quick-chip" onclick="window.scrollTo(0, 400)" type="button"><span>🏖️</span> Leaves (${leavesCount})</button>
+            <button class="db-quick-chip" data-go="leave" type="button"><span>🏖️</span> Leaves (${leavesCount})</button>
             <button class="db-quick-chip" onclick="toggleHodTimetableForm()" type="button"><span>🗓️</span> + Timetable Change</button>
             <button class="db-quick-chip" onclick="toggleHodNoticeForm()" type="button"><span>📢</span> + Dept Notice</button>
             <button class="db-quick-chip" onclick="openIssueCertificateDialog()" type="button"><span>🏅</span> Issue SHA-256 Certificate</button>
@@ -1743,71 +1743,28 @@ function renderHODHome() {
       </div>
 
       <div class="exec-dashboard-wrap">
-        <!-- CARD 1: PENDING LEAVES -->
+        <!-- CARD 1: LEAVE APPROVAL SHORTCUT -->
         <div class="exec-card" id="card-hod-leaves">
           <div class="exec-card-head">
             <div class="exec-card-title-group">
               <span class="exec-card-icon">🏖️</span>
-              <h3 class="exec-card-title">Pending Leave Approvals (${escapeHtml(myD)})</h3>
+              <h3 class="exec-card-title">Leave Approvals (${escapeHtml(myD)})</h3>
               <span class="exec-card-badge ${leavesCount > 0 ? 'urgent' : ''}">${leavesCount} Pending</span>
             </div>
             <div class="exec-card-actions">
-              <button class="chip" onclick="hodLeavesList = null; loadHodDashboardData();" type="button">🔄 Refresh</button>
+              <button class="chip" data-go="leave" type="button">Open Leave Portal →</button>
             </div>
           </div>
-          ${hodLeavesLoading ? renderLoadingState('Loading department leave requests…') : (
-            pendingLeaves.length === 0
-              ? renderEmptyState('🎉', 'No Pending Leaves', `All leave requests from students and staff in ${escapeHtml(myD)} have been decided.`)
-              : `<div class="approval-list">
-                  ${pendingLeaves.map(lv => {
-                    const curUser = (sessionStorage.getItem('cc_user') || '').toLowerCase();
-                    const isOwn = (lv.login_id && lv.login_id.toLowerCase() === curUser) ||
-                                  (lv.user_id && String(lv.user_id).toLowerCase() === curUser);
-                    const isShort = (lv.days || 1) <= 3;
-                    const daysLabel = isShort
-                      ? `${lv.days} day(s) · Short Leave (HOD Final Approval)`
-                      : `${lv.days} day(s) · Long Leave (Forwarded to Principal)`;
-                    return `
-                      <div class="approval-item">
-                        <div class="approval-item-top">
-                          <div class="approval-item-person">
-                            <span class="approval-item-name">${escapeHtml(lv.name)}</span>
-                            <div class="approval-item-meta">
-                              <span class="approval-meta-pill">${escapeHtml(lv.login_id)}</span>
-                              <span class="approval-meta-pill">${escapeHtml(lv.applicant_role || 'student')}</span>
-                              <span class="approval-meta-pill">${escapeHtml(lv.dept || myD)}</span>
-                            </div>
-                          </div>
-                          <span class="approval-days-badge ${isShort ? '' : 'long-leave'}">${daysLabel}</span>
-                        </div>
-                        <div class="approval-detail-row">
-                          <span class="approval-detail-label">Period:</span>
-                          <span><b>${escapeHtml(lv.from_date)}</b> to <b>${escapeHtml(lv.to_date)}</b> (${lv.days} days)</span>
-                        </div>
-                        <div class="approval-detail-row">
-                          <span class="approval-detail-label">Stage:</span>
-                          <span class="chip" style="font-size:11px;${lv.stage === 'Waiting for Principal' ? 'background:rgba(99,102,241,0.15);color:#818cf8;font-weight:700' : ''}">${escapeHtml(lv.stage || 'Pending')}</span>
-                        </div>
-                        <div class="approval-reason-box">
-                          <b>Reason (${escapeHtml(lv.leave_type)}):</b> ${escapeHtml(lv.reason || 'Not specified')}
-                        </div>
-                        ${isOwn ? `<p class="sub" style="color:var(--red)">⚠️ This is your own leave application. Department Heads cannot decide their own leave.</p>` :
-                          lv.stage === 'Waiting for Principal' ? `<p class="sub" style="color:var(--accent);font-weight:600">⏳ Already forwarded to Principal for sanction. (Waiting for Principal)</p>` : `
-                          <input type="text" id="hod-note-${lv.id}" class="approval-note-input" placeholder="Decision note / comments (optional)…">
-                          <div class="approval-btn-group">
-                            <button class="btn sm" onclick="actHodLeave(${lv.id}, 'Approved', ${isShort})" type="button">
-                              ${isShort ? '✔ Approve (Final)' : '✔ Approve & Forward to Principal'}
-                            </button>
-                            <button class="btn ghost sm" style="color:var(--red)" onclick="actHodLeave(${lv.id}, 'Rejected')" type="button">
-                              ✖ Reject
-                            </button>
-                          </div>
-                        `}
-                      </div>
-                    `;
-                  }).join('')}
-                </div>`
-          )}
+          <p class="sub" style="margin:0 0 12px">Student &amp; staff leave requests for ${escapeHtml(myD)} are managed in the dedicated Leave workspace.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.02);border:1px solid var(--line);border-radius:12px;padding:14px 18px;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text)">${leavesCount} Application${leavesCount === 1 ? '' : 's'} Pending</div>
+              <div class="sub" style="font-size:12px">${leavesCount > 0 ? 'Requires HOD authorization or endorsement to Principal' : 'All department leave applications have been reviewed.'}</div>
+            </div>
+            <button class="btn sm" data-go="leave" type="button" style="display:inline-flex;align-items:center;gap:6px">
+              <span>🏖️</span> Open Leave Approvals
+            </button>
+          </div>
         </div>
 
         <!-- CARD 2: TIMETABLE CHANGES -->
@@ -2077,6 +2034,7 @@ function renderPrincipalHome() {
         <div class="db-quick-bar">
           <span class="db-quick-label">Directorate Controls:</span>
           <div class="db-quick-chips">
+            <button class="db-quick-chip" data-go="leave" type="button"><span>⚖️</span> Leave Sanctions (${waitingCount})</button>
             <button class="db-quick-chip" onclick="triggerPrincipalSlaRun()" id="btn-prin-sla" type="button"><span>⚡</span> Run SLA Check On-Demand</button>
             <button class="db-quick-chip" onclick="openIssueCertificateDialog()" type="button"><span>🏅</span> Issue SHA-256 Certificate</button>
             <button class="db-quick-chip" data-go="notices" type="button"><span>📢</span> College-Wide Circular</button>
@@ -2087,7 +2045,7 @@ function renderPrincipalHome() {
       </div>
 
       <div class="exec-dashboard-wrap">
-        <!-- CARD 1: WAITING FOR ME (SECOND-LEVEL LEAVE APPROVALS) -->
+        <!-- CARD 1: SECOND-LEVEL LEAVE SANCTIONS SHORTCUT -->
         <div class="exec-card" id="card-prin-leaves">
           <div class="exec-card-head">
             <div class="exec-card-title-group">
@@ -2096,54 +2054,19 @@ function renderPrincipalHome() {
               <span class="exec-card-badge ${waitingCount > 0 ? 'urgent' : ''}">${waitingCount} Waiting for Me</span>
             </div>
             <div class="exec-card-actions">
-              <div style="display:inline-flex;background:rgba(0,0,0,0.06);border-radius:20px;padding:2px">
-                <button class="chip" style="${prinLeavesViewMode === 'waiting' ? 'background:var(--accent);color:#fff' : ''}" onclick="setPrinLeavesViewMode('waiting')" type="button">Waiting for Me (${waitingCount})</button>
-                <button class="chip" style="${prinLeavesViewMode === 'all' ? 'background:var(--accent);color:#fff' : ''}" onclick="setPrinLeavesViewMode('all')" type="button">All College Leaves</button>
-              </div>
-              <button class="chip" onclick="prinWaitingLeaves = null; prinAllLeaves = null; loadPrincipalDashboardData();" type="button">🔄 Refresh</button>
+              <button class="chip" data-go="leave" type="button">Open Leave Directorate →</button>
             </div>
           </div>
-
-          ${prinLeavesLoading ? renderLoadingState('Loading leave applications…') : (() => {
-            const list = prinLeavesViewMode === 'waiting' ? waitingLeaves : (prinAllLeaves || []);
-            if (list.length === 0) {
-              return renderEmptyState('✅', prinLeavesViewMode === 'waiting' ? 'No Leaves Waiting for Sanction' : 'No Leaves Recorded', 'All multi-day and escalated leaves have been reviewed.');
-            }
-            return `
-              <div class="approval-list">
-                ${list.map(lv => `
-                  <div class="approval-item">
-                    <div class="approval-item-top">
-                      <div class="approval-item-person">
-                        <span class="approval-item-name">${escapeHtml(lv.name)}</span>
-                        <div class="approval-item-meta">
-                          <span class="approval-meta-pill">${escapeHtml(lv.login_id)}</span>
-                          <span class="approval-meta-pill">${escapeHtml(lv.applicant_role || 'student')}</span>
-                          <span class="approval-meta-pill">${escapeHtml(lv.dept || 'General')}</span>
-                        </div>
-                      </div>
-                      <span class="approval-days-badge long-leave">${lv.days || 1} days · ${escapeHtml(lv.stage || lv.status)}</span>
-                    </div>
-                    <div class="approval-detail-row">
-                      <span class="approval-detail-label">Period:</span>
-                      <span><b>${escapeHtml(lv.from_date)}</b> to <b>${escapeHtml(lv.to_date)}</b></span>
-                    </div>
-                    <div class="approval-reason-box">
-                      <b>Reason (${escapeHtml(lv.leave_type)}):</b> ${escapeHtml(lv.reason || 'N/A')}
-                      ${lv.action_by ? `<div class="sub" style="margin-top:4px">HOD Endorsement: ${escapeHtml(lv.action_by)} ${lv.action_note ? '· ' + escapeHtml(lv.action_note) : ''}</div>` : ''}
-                    </div>
-                    ${lv.status === 'Pending' ? `
-                      <input type="text" id="prin-note-${lv.id}" class="approval-note-input" placeholder="Principal executive sanction note…">
-                      <div class="approval-btn-group">
-                        <button class="btn sm" onclick="actPrincipalLeave(${lv.id}, 'Approved')" type="button">✔ Sanction / Approve</button>
-                        <button class="btn ghost sm" style="color:var(--red)" onclick="actPrincipalLeave(${lv.id}, 'Rejected')" type="button">✖ Reject</button>
-                      </div>
-                    ` : `<p class="sub">Decided: <b>${escapeHtml(lv.status)}</b> by ${escapeHtml(lv.action_by || 'Principal')}</p>`}
-                  </div>
-                `).join('')}
-              </div>
-            `;
-          })()}
+          <p class="sub" style="margin:0 0 12px">College-wide multi-day and escalated leaves requiring Principal executive sanction are reviewed and authorized in the dedicated Leave Sanctions Directorate.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.02);border:1px solid var(--line);border-radius:12px;padding:14px 18px;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text)">${waitingCount} Application${waitingCount === 1 ? '' : 's'} Waiting for Sanction</div>
+              <div class="sub" style="font-size:12px">${prinAllLeaves ? prinAllLeaves.length : 4} total college leaves registered · ${waitingCount} awaiting Principal executive sanction</div>
+            </div>
+            <button class="btn sm" data-go="leave" type="button" style="display:inline-flex;align-items:center;gap:6px">
+              <span>⚖️</span> Sanction Leaves in Leave Hub
+            </button>
+          </div>
         </div>
 
         <!-- CARD 2: ESCALATIONS & SLA RUN -->
