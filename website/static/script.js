@@ -1731,12 +1731,13 @@ function renderHODHome() {
           </div>
         </div>
         <div class="db-quick-bar">
-          <span class="db-quick-label">Department Actions:</span>
+          <span class="db-quick-label">Department Shortcuts:</span>
           <div class="db-quick-chips">
             <button class="db-quick-chip" data-go="leave" type="button"><span>🏖️</span> Leaves (${leavesCount})</button>
-            <button class="db-quick-chip" onclick="toggleHodTimetableForm()" type="button"><span>🗓️</span> + Timetable Change</button>
-            <button class="db-quick-chip" onclick="toggleHodNoticeForm()" type="button"><span>📢</span> + Dept Notice</button>
-            <button class="db-quick-chip" onclick="openIssueCertificateDialog()" type="button"><span>🏅</span> Issue SHA-256 Certificate</button>
+            <button class="db-quick-chip" data-go="timetable" type="button"><span>🗓️</span> Timetable</button>
+            <button class="db-quick-chip" data-go="notices" type="button"><span>📢</span> Notices</button>
+            <button class="db-quick-chip" data-go="classes" type="button"><span>📊</span> Classes Held</button>
+            <button class="db-quick-chip" data-go="complaints" type="button"><span>🛡️</span> Grievances (${deptComplaints.length})</button>
             <a href="/api/timetable/export.ics?dept=${encodeURIComponent(myD)}&year=3" class="db-quick-chip" download><span>📅</span> .ICS Feed</a>
           </div>
         </div>
@@ -1776,72 +1777,10 @@ function renderHODHome() {
               <span class="exec-card-badge">${ttChanges.length} Changes</span>
             </div>
             <div class="exec-card-actions">
-              <button class="chip" onclick="toggleHodTimetableForm()" type="button">${hodTimetableFormOpen ? '✕ Close Form' : '+ Post Change'}</button>
+              <button class="chip" data-go="timetable" type="button">Open Timetable →</button>
               <a href="/api/timetable/export.ics?dept=${encodeURIComponent(myD)}&year=3" class="chip" download>📅 Export .ICS</a>
             </div>
           </div>
-
-          ${hodTimetableFormOpen ? `
-            <form id="hod-tt-form" onsubmit="submitTimetableAdjustment(event)" style="background:rgba(0,0,0,0.03);padding:14px;border-radius:12px;margin-bottom:14px;display:flex;flex-direction:column;gap:10px;">
-              <h4 style="margin:0 0 4px">Post Substitution, Extra Class or Cancellation</h4>
-              <p class="sub" style="margin:0">Automatically broadcasts a notice to ${escapeHtml(myD)} students and updates the live .ics calendar stream.</p>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:8px;">
-                <div>
-                  <label class="sub">Adjustment Type</label>
-                  <select name="adjustment_type" class="inp sm" style="width:100%">
-                    <option value="substitution">Substitution</option>
-                    <option value="extra_class">Extra Class</option>
-                    <option value="cancellation">Cancellation</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="sub">Year</label>
-                  <select name="year" class="inp sm" style="width:100%">
-                    <option value="3">Year 3</option>
-                    <option value="1">Year 1</option>
-                    <option value="2">Year 2</option>
-                    <option value="4">Year 4</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="sub">Date (YYYY-MM-DD)</label>
-                  <input type="date" name="date" class="inp sm" required value="${new Date().toISOString().slice(0, 10)}">
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:8px;">
-                <div>
-                  <label class="sub">Subject / Course Name</label>
-                  <input type="text" name="subject" class="inp sm" placeholder="e.g. Operating Systems" required>
-                </div>
-                <div>
-                  <label class="sub">Time / Period</label>
-                  <input type="text" name="time" class="inp sm" placeholder="e.g. 10:00 - 11:00 AM / Period 2">
-                </div>
-                <div>
-                  <label class="sub">Room / Venue</label>
-                  <input type="text" name="room" class="inp sm" placeholder="e.g. LH-102 / Software Lab 1">
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:8px;">
-                <div>
-                  <label class="sub">Regular Faculty</label>
-                  <input type="text" name="original_teacher" class="inp sm" placeholder="e.g. Dr. P. Kar">
-                </div>
-                <div>
-                  <label class="sub">Substitute Faculty (if applicable)</label>
-                  <input type="text" name="substitute_teacher" class="inp sm" placeholder="e.g. Prof. CSE Teacher">
-                </div>
-              </div>
-              <div>
-                <label class="sub">Reason / Academic Note</label>
-                <input type="text" name="reason" class="inp sm" placeholder="e.g. Faculty medical leave / Makeup lecture before midterms">
-              </div>
-              <div class="btns" style="margin-top:6px">
-                <button type="submit" class="btn sm">Publish &amp; Broadcast Notice</button>
-                <button type="button" class="btn ghost sm" onclick="toggleHodTimetableForm()">Cancel</button>
-              </div>
-            </form>
-          ` : ''}
 
           ${hodTimetableLoading ? renderLoadingState('Loading timetable changes…') : (
             ttChanges.length === 0
@@ -1875,31 +1814,9 @@ function renderHODHome() {
               <span class="exec-card-badge">${deptNotices.length} Published</span>
             </div>
             <div class="exec-card-actions">
-              <button class="chip" onclick="toggleHodNoticeForm()" type="button">${hodNoticeFormOpen ? '✕ Close Composer' : '+ Post Notice'}</button>
+              <button class="chip" data-go="notices" type="button">Open Notices →</button>
             </div>
           </div>
-
-          ${hodNoticeFormOpen ? `
-            <form onsubmit="submitHodDeptNotice(event)" style="background:rgba(0,0,0,0.03);padding:14px;border-radius:12px;margin-bottom:14px;display:flex;flex-direction:column;gap:10px;">
-              <h4 style="margin:0 0 4px">Issue Circular to ${escapeHtml(myD)}</h4>
-              <p class="sub" style="margin:0">Notice audience is restricted to your department only (Dept:${escapeHtml(myD)}).</p>
-              <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
-                <input type="text" id="hod-nt-title" class="inp sm" placeholder="Notice Title…" required>
-                <select id="hod-nt-year" class="inp sm">
-                  <option value="All">All Years</option>
-                  <option value="1">Year 1</option>
-                  <option value="2">Year 2</option>
-                  <option value="3">Year 3</option>
-                  <option value="4">Year 4</option>
-                </select>
-              </div>
-              <textarea id="hod-nt-body" class="inp sm" rows="3" placeholder="Notice message content…" required></textarea>
-              <div class="btns">
-                <button type="submit" class="btn sm">Publish Circular</button>
-                <button type="button" class="btn ghost sm" onclick="toggleHodNoticeForm()">Cancel</button>
-              </div>
-            </form>
-          ` : ''}
 
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${deptNotices.length === 0
@@ -1960,7 +1877,7 @@ function renderHODHome() {
               <span class="exec-card-badge">${deptComplaints.length} Active</span>
             </div>
             <div class="exec-card-actions">
-              <button class="chip" onclick="hodComplaintsList = null; loadHodDashboardData();" type="button">🔄 Refresh</button>
+              <button class="chip" data-go="complaints" type="button">Open Grievances →</button>
             </div>
           </div>
           <p class="sub" style="margin:0 0 10px">Review College/Academic complaints from ${escapeHtml(myD)} students. Anonymous complaints strictly mask student identities.</p>
@@ -1977,14 +1894,9 @@ function renderHODHome() {
                       </div>
                       <div class="sub">Category: <b>${escapeHtml(c.category)}</b> · From: <b>${escapeHtml(c.name)}</b> ${c.is_anonymous ? '🛡️ (Anonymous)' : ''}</div>
                       <p style="margin:4px 0;font-size:12.5px">${escapeHtml(c.description || '')}</p>
-                      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
-                        <select id="hod-cmp-st-${c.id}" class="inp sm" style="width:auto">
-                          <option value="In Progress" ${c.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                          <option value="Resolved" ${c.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-                          <option value="Closed" ${c.status === 'Closed' ? 'selected' : ''}>Closed</option>
-                        </select>
-                        <input type="text" id="hod-cmp-note-${c.id}" class="inp sm" placeholder="Action note…" style="flex:1;min-width:140px">
-                        <button class="btn sm" onclick="updateComplaintStatusHOD(${c.id})" type="button">Update</button>
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:6px">
+                        <span class="chip" style="font-size:11px;font-weight:700">Status: ${escapeHtml(c.status)}</span>
+                        <span class="sub" style="font-size:11.5px">Reported: ${escapeHtml(String(c.created_at || '').slice(0, 10))}</span>
                       </div>
                     </div>
                   `).join('')}
@@ -2032,11 +1944,10 @@ function renderPrincipalHome() {
           </div>
         </div>
         <div class="db-quick-bar">
-          <span class="db-quick-label">Directorate Controls:</span>
+          <span class="db-quick-label">Directorate Shortcuts:</span>
           <div class="db-quick-chips">
             <button class="db-quick-chip" data-go="leave" type="button"><span>⚖️</span> Leave Sanctions (${waitingCount})</button>
-            <button class="db-quick-chip" onclick="triggerPrincipalSlaRun()" id="btn-prin-sla" type="button"><span>⚡</span> Run SLA Check On-Demand</button>
-            <button class="db-quick-chip" onclick="openIssueCertificateDialog()" type="button"><span>🏅</span> Issue SHA-256 Certificate</button>
+            <button class="db-quick-chip" data-go="complaints" type="button"><span>🚨</span> Escalations (${escCount})</button>
             <button class="db-quick-chip" data-go="notices" type="button"><span>📢</span> College-Wide Circular</button>
             <button class="db-quick-chip" data-go="classes" type="button"><span>📊</span> Classes Held Monitor</button>
             <button class="db-quick-chip" data-go="students" type="button"><span>👥</span> Student Directory</button>
@@ -2078,7 +1989,7 @@ function renderPrincipalHome() {
               <span class="exec-card-badge ${escCount > 0 ? 'urgent' : ''}">${escCount} Active</span>
             </div>
             <div class="exec-card-actions">
-              <button class="chip" onclick="triggerPrincipalSlaRun()" style="background:var(--accent);color:#fff" type="button">⚡ Run SLA Check</button>
+              <button class="chip" data-go="complaints" type="button">Open Complaints →</button>
               <button class="chip" onclick="prinEscalationsList = null; loadPrincipalDashboardData();" type="button">🔄 Refresh</button>
             </div>
           </div>
@@ -2092,16 +2003,13 @@ function renderPrincipalHome() {
                     <div class="approval-item">
                       <div class="approval-item-top">
                         <span class="approval-item-name">${escapeHtml(esc.title)}</span>
-                        <span class="approval-days-badge long-leave" style="background:rgba(239,68,68,0.15);color:#dc2626">URGENT ESCALATION</span>
+                        <span class="approval-days-badge long-leave" style="background:rgba(239,68,68,0.15);color:#dc2626">${escapeHtml(esc.status.toUpperCase())} ESCALATION</span>
                       </div>
                       <div class="approval-reason-box">${escapeHtml(esc.details || 'Breach requires executive resolution')}</div>
-                      ${esc.status === 'pending' ? `
-                        <input type="text" id="esc-note-${esc.id}" class="approval-note-input" placeholder="Executive resolution directive…">
-                        <div class="approval-btn-group">
-                          <button class="btn sm" onclick="actOnEscalation(${esc.id}, 'closed')" type="button">Resolve &amp; Close Escalation</button>
-                          <button class="btn ghost sm" style="color:var(--red)" onclick="actOnEscalation(${esc.id}, 'rejected')" type="button">Dismiss</button>
-                        </div>
-                      ` : `<p class="sub">Status: <b>${escapeHtml(esc.status)}</b> by ${escapeHtml(esc.action_by || 'Principal')}</p>`}
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">
+                        <span class="sub" style="font-size:11.5px">Escalated: <b>${escapeHtml(String(esc.created_at || '').slice(0, 10))}</b> ${esc.action_by ? '· Decided by ' + escapeHtml(esc.action_by) : ''}</span>
+                        <span class="chip" style="font-size:11px;font-weight:700">Status: ${escapeHtml(esc.status)}</span>
+                      </div>
                     </div>
                   `).join('')}
                 </div>`
