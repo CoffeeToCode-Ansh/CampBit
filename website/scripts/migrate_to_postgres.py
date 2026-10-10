@@ -24,8 +24,15 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-BASE = Path(__file__).resolve().parent
-load_dotenv(BASE / ".env")
+BASE = Path(__file__).resolve().parent.parent
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE / ".env")
+except ImportError:
+    pass
 
 import database
 

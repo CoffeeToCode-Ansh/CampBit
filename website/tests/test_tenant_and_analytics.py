@@ -69,7 +69,7 @@ class TestTenantAuditAndAnalytics(unittest.TestCase):
         users_bput = res_bput.json()
         self.assertFalse(any(u["login_id"] == "STU-OUTR-01" for u in users_bput))
 
-        res_outr = self.client.get("/api/users/search?q=OUTR", headers=self.h_adm_outr)
+        res_outr = self.client.get("/api/users/search?q=STU-OUTR-01", headers=self.h_adm_outr)
         self.assertEqual(res_outr.status_code, 200)
         users_outr = res_outr.json()
         self.assertTrue(any(u["login_id"] == "STU-OUTR-01" for u in users_outr))

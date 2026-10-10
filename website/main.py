@@ -29,14 +29,29 @@ from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from dotenv import load_dotenv
+from starlette.middleware.gzip import GZipMiddleware
 
 import database
 from database import get_db, DB_PATH, IS_POSTGRES
 
-load_dotenv(Path(__file__).parent / ".env")
-
 BASE = Path(__file__).parent
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE / ".env")
+except ImportError:
+    _env_f = BASE / ".env"
+    if _env_f.is_file():
+        try:
+            with open(_env_f, "r", encoding="utf-8") as _f:
+                for _l in _f:
+                    _l = _l.strip()
+                    if _l and not _l.startswith("#") and "=" in _l:
+                        _k, _v = _l.split("=", 1)
+                        _k, _v = _k.strip(), _v.strip().strip("\"'")
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
 UPLOAD_DIR = BASE / "uploads"
 STATIC_DIR = BASE / "static"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -362,6 +377,9 @@ def viewer_scope(user, raw: dict):
 
 
 app = FastAPI()
+
+# High-efficiency GZip compression middleware (compresses static assets & API payloads > 1000 bytes)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
 _allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] if _allowed_origins_env else ["*"]
@@ -2042,6 +2060,8 @@ def calc_leave_days(from_date: str, to_date: str) -> int:
 @app.get("/api/leaves")
 def get_leaves(user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
     role = user["role"]
+    if role == "guest":
+        raise HTTPException(403, "Access denied: Guests cannot view internal leave records")
     college_id = user.get("college_id", "BPUT")
     if role == "student":
         # Student sees ONLY their own leave requests
@@ -2458,6 +2478,8 @@ def complaint_out(row, user) -> dict:
 
 @app.get("/api/complaints")
 def get_complaints(user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
+    if user["role"] == "guest":
+        raise HTTPException(403, "Access denied: Guests cannot view internal complaints")
     college_id = user.get("college_id", "BPUT")
     rows = db.execute("SELECT * FROM complaints WHERE college_id = ? ORDER BY id DESC", (college_id,)).fetchall()
     return [complaint_out(r, user) for r in rows if complaint_visible(r, user, db)]

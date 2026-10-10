@@ -1,6 +1,6 @@
-fastapi
-uvicorn[standard]
-PyJWT
-python-multipart
-psycopg2-binary
-python-dotenv
+# CampBit Core Production Dependencies (SQLite Default)
+# Minimal, lightweight footprint: zero C-extension build requirements
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+PyJWT>=2.8.0
+python-multipart>=0.0.6

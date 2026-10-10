@@ -85,7 +85,7 @@ if (typeof window !== 'undefined') {
       },
       configurable: true
     });
-    window.saveNotices = function() {
+    window.saveNotices = function () {
       if (typeof customNotices !== 'undefined') {
         saveJson('cc_nt', customNotices);
       }
@@ -624,27 +624,27 @@ function renderLeave() {
   if (role === 'student') {
     out += `<div class="sms-gateway-card" style="margin-bottom:18px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.04));border:1px solid rgba(99,102,241,0.25);border-radius:14px;padding:16px 18px">` +
       `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">` +
-        `<div style="display:flex;align-items:center;gap:10px">` +
-          `<span style="font-size:24px">📲</span>` +
-          `<div>` +
-            `<b style="font-size:15px;color:var(--text)">Rural &amp; Low-Connectivity SMS Simulator (+91 99370 00000)</b>` +
-            `<p class="sub" style="margin:2px 0 0;font-size:12px">Basic keypad or offline? Text <code>LEAVE &lt;days&gt; &lt;reason&gt;</code> to apply without data.</p>` +
-          `</div>` +
-        `</div>` +
-        `<span class="badge ok" style="font-size:11px">⚡ Live Gateway</span>` +
+      `<div style="display:flex;align-items:center;gap:10px">` +
+      `<span style="font-size:24px">📲</span>` +
+      `<div>` +
+      `<b style="font-size:15px;color:var(--text)">Rural &amp; Low-Connectivity SMS Simulator (+91 99370 00000)</b>` +
+      `<p class="sub" style="margin:2px 0 0;font-size:12px">Basic keypad or offline? Text <code>LEAVE &lt;days&gt; &lt;reason&gt;</code> to apply without data.</p>` +
+      `</div>` +
+      `</div>` +
+      `<span class="badge ok" style="font-size:11px">⚡ Live Gateway</span>` +
       `</div>` +
       `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">` +
-        `<input id="sms-text-inp" type="text" value="LEAVE 2 FEVER" placeholder="e.g. LEAVE 2 FEVER or LEAVE 1 SISTER WEDDING" style="flex:1;min-width:200px;font-family:monospace;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">` +
-        `<button class="btn sm" id="btn-send-sms" data-sms-send type="button" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">📡 Send SMS</button>` +
+      `<input id="sms-text-inp" type="text" value="LEAVE 2 FEVER" placeholder="e.g. LEAVE 2 FEVER or LEAVE 1 SISTER WEDDING" style="flex:1;min-width:200px;font-family:monospace;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">` +
+      `<button class="btn sm" id="btn-send-sms" data-sms-send type="button" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">📡 Send SMS</button>` +
       `</div>` +
       `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;font-size:11.5px;align-items:center">` +
-        `<span style="color:var(--muted)">Presets:</span>` +
-        `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 2 FEVER">LEAVE 2 FEVER</button>` +
-        `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 1 SISTER WEDDING">LEAVE 1 SISTER WEDDING</button>` +
-        `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 3 CHIKUNGUNYA">LEAVE 3 CHIKUNGUNYA</button>` +
+      `<span style="color:var(--muted)">Presets:</span>` +
+      `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 2 FEVER">LEAVE 2 FEVER</button>` +
+      `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 1 SISTER WEDDING">LEAVE 1 SISTER WEDDING</button>` +
+      `<button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:11px" data-sms-set="LEAVE 3 CHIKUNGUNYA">LEAVE 3 CHIKUNGUNYA</button>` +
       `</div>` +
       `<div id="sms-sim-result" style="display:none;margin-top:12px;padding:10px 14px;border-radius:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);font-size:12.5px;color:var(--text);font-family:monospace"></div>` +
-    `</div>`;
+      `</div>`;
   }
 
   // Apply form
@@ -653,7 +653,7 @@ function renderLeave() {
     `<select id="lt">${LEAVE_TYPES[role].map(t => `<option>${t}</option>`).join('')}</select>` +
     (role === 'student' ?
       `<p class="sub" style="margin:6px 0 12px;font-size:12px;color:var(--muted)">🏛️ All student leave applications are routed directly to the <b>Head of Department (HOD)</b> for approval.</p>`
-    : '') +
+      : '') +
     `<div class="two">` +
     `<div><label for="lf">From</label><input type="date" id="lf" min="${todayIso()}" value="${todayIso()}"></div>` +
     `<div><label for="lto">To</label><input type="date" id="lto" min="${todayIso()}" value="${todayIso()}"></div>` +
@@ -667,18 +667,18 @@ function renderLeave() {
     (mine.length
       ? mine.map(r =>
         `<div class="item">` +
-          `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s)}</div>` +
-          `<p>${rangeText(r)}</p>` +
-          `<p style="margin:4px 0">${escapeHtml(r.r)}</p>` +
-          (r.by
-            ? `<p style="margin-top:6px;font-size:12px;font-weight:600;color:${r.s === 'Approved' ? '#10b981' : '#ef4444'}">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b>${r.at ? ' · ' + formatDate(new Date(r.at).toISOString().slice(0, 10)) : ''}</p>`
-            : '') +
-          (r.s === 'Approved'
-            ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">` +
-                `<span style="font-size:12px;color:var(--muted)">🛡️ Gate pass authorized by campus security</span>` +
-                `<button class="btn sm" data-gp="${r.id}" type="button" style="background:linear-gradient(135deg,#0284c7,#0369a1);box-shadow:0 2px 8px rgba(2,132,199,0.3)">🎫 View Digital Gate Pass</button>` +
-              `</div>`
-            : '') +
+        `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s)}</div>` +
+        `<p>${rangeText(r)}</p>` +
+        `<p style="margin:4px 0">${escapeHtml(r.r)}</p>` +
+        (r.by
+          ? `<p style="margin-top:6px;font-size:12px;font-weight:600;color:${r.s === 'Approved' ? '#10b981' : '#ef4444'}">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b>${r.at ? ' · ' + formatDate(new Date(r.at).toISOString().slice(0, 10)) : ''}</p>`
+          : '') +
+        (r.s === 'Approved'
+          ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">` +
+          `<span style="font-size:12px;color:var(--muted)">🛡️ Gate pass authorized by campus security</span>` +
+          `<button class="btn sm" data-gp="${r.id}" type="button" style="background:linear-gradient(135deg,#0284c7,#0369a1);box-shadow:0 2px 8px rgba(2,132,199,0.3)">🎫 View Digital Gate Pass</button>` +
+          `</div>`
+          : '') +
         `</div>`
       ).join('')
       : '<p class="sub">No requests yet.</p>') + `</div>`;
@@ -692,40 +692,40 @@ function renderLeave() {
 
     out += `<div class="lv-review-panel">` +
       `<div class="lv-panel-header">` +
-        `<div class="lv-panel-title">` +
-          `<span>🎓 Student Leave Applications</span>` +
-          `<span class="lv-auth-tag ${tagClass}">🛡️ Authorized: ${roleTitle}</span>` +
-        `</div>` +
-        `<div class="lv-count-badge">${pendingCount} Pending Decision</div>` +
+      `<div class="lv-panel-title">` +
+      `<span>🎓 Student Leave Applications</span>` +
+      `<span class="lv-auth-tag ${tagClass}">🛡️ Authorized: ${roleTitle}</span>` +
+      `</div>` +
+      `<div class="lv-count-badge">${pendingCount} Pending Decision</div>` +
       `</div>` +
       `<p class="sub" style="margin:-10px 0 16px;font-size:12.5px">Exclusive departmental authority: Review, grant or reject student applications as Head of Department.</p>` +
       `<div class="list">` +
       (relevantApprovals.length
         ? relevantApprovals.map(r =>
           `<div class="lv-req-item status-${String(r.s).toLowerCase()}">` +
-            `<div class="lv-req-header">` +
-              `<div class="lv-student-meta">` +
-                `<span class="lv-student-name">${escapeHtml(r.n)}</span>` +
-                (r.dept ? `<span class="lv-meta-chip">📚 ${escapeHtml(r.dept)}</span>` : '') +
-                (r.hostel ? `<span class="lv-meta-chip">🏠 ${escapeHtml(r.hostel)}</span>` : '') +
-                `<span class="lv-meta-chip" style="color:var(--accent)">Route: HOD</span>` +
-              `</div>` +
-              statusBadge(r.s) +
+          `<div class="lv-req-header">` +
+          `<div class="lv-student-meta">` +
+          `<span class="lv-student-name">${escapeHtml(r.n)}</span>` +
+          (r.dept ? `<span class="lv-meta-chip">📚 ${escapeHtml(r.dept)}</span>` : '') +
+          (r.hostel ? `<span class="lv-meta-chip">🏠 ${escapeHtml(r.hostel)}</span>` : '') +
+          `<span class="lv-meta-chip" style="color:var(--accent)">Route: HOD</span>` +
+          `</div>` +
+          statusBadge(r.s) +
+          `</div>` +
+          `<p style="margin:4px 0;font-size:13px"><b>${escapeHtml(r.t)} leave</b> · ${rangeText(r)}</p>` +
+          `<div class="lv-reason-box">"${escapeHtml(r.r)}"</div>` +
+          (r.s === 'Pending'
+            ? `<div class="lv-action-row">` +
+            `<span class="sub" style="font-size:12px">Action required by ${roleTitle}</span>` +
+            `<div class="btns" style="gap:8px">` +
+            `<button class="btn sm lv-btn-grant" data-ap2="${r.id}:Approved" type="button">✔ Grant Leave</button>` +
+            `<button class="btn ghost sm lv-btn-reject" data-ap2="${r.id}:Rejected" type="button">✖ Reject</button>` +
             `</div>` +
-            `<p style="margin:4px 0;font-size:13px"><b>${escapeHtml(r.t)} leave</b> · ${rangeText(r)}</p>` +
-            `<div class="lv-reason-box">"${escapeHtml(r.r)}"</div>` +
-            (r.s === 'Pending'
-              ? `<div class="lv-action-row">` +
-                  `<span class="sub" style="font-size:12px">Action required by ${roleTitle}</span>` +
-                  `<div class="btns" style="gap:8px">` +
-                    `<button class="btn sm lv-btn-grant" data-ap2="${r.id}:Approved" type="button">✔ Grant Leave</button>` +
-                    `<button class="btn ghost sm lv-btn-reject" data-ap2="${r.id}:Rejected" type="button">✖ Reject</button>` +
-                  `</div>` +
-                `</div>`
-              : (r.by
-                  ? `<div class="lv-action-row"><div class="lv-decided-stamp">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b>${r.at ? ' on ' + formatDate(new Date(r.at).toISOString().slice(0, 10)) : ''}</div>${r.s === 'Approved' ? `<button class="btn sm ghost" data-gp="${r.id}" type="button" style="font-size:11.5px">🎫 View Pass</button>` : ''}</div>`
-                  : '')
-            ) +
+            `</div>`
+            : (r.by
+              ? `<div class="lv-action-row"><div class="lv-decided-stamp">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b>${r.at ? ' on ' + formatDate(new Date(r.at).toISOString().slice(0, 10)) : ''}</div>${r.s === 'Approved' ? `<button class="btn sm ghost" data-gp="${r.id}" type="button" style="font-size:11.5px">🎫 View Pass</button>` : ''}</div>`
+              : '')
+          ) +
           `</div>`
         ).join('')
         : '<p class="sub" style="padding:16px;text-align:center;background:rgba(128,128,128,0.04);border-radius:10px">No student leave requests pending for your scope.</p>') +
@@ -735,10 +735,10 @@ function renderLeave() {
     out += `<div class="lv-restricted-banner">` +
       `<span style="font-size:24px">🔒</span>` +
       `<div>` +
-        `<b style="font-size:14px;display:block;margin-bottom:2px">Student Leave Review Restricted</b>` +
-        `<p class="sub" style="margin:0;font-size:12.5px">Under campus governance rules, student leave applications are restricted. Only the <b>Head of Department (HOD)</b> can view and grant student leaves.</p>` +
+      `<b style="font-size:14px;display:block;margin-bottom:2px">Student Leave Review Restricted</b>` +
+      `<p class="sub" style="margin:0;font-size:12.5px">Under campus governance rules, student leave applications are restricted. Only the <b>Head of Department (HOD)</b> can view and grant student leaves.</p>` +
       `</div>` +
-    `</div>`;
+      `</div>`;
   }
   return out;
 }
@@ -791,7 +791,7 @@ function submitLeave() {
       reason: reason
     }).then(res => {
       if (res && res.leave) entry.id = res.leave.id;
-    }).catch(() => {});
+    }).catch(() => { });
   }
   leaveMessage = role === 'staff'
     ? '✅ Leave request sent to the admin. Status: Pending.'
@@ -821,7 +821,7 @@ function decideStudentLeave(id, status) {
   }
   saveLeave();
   if (typeof API !== 'undefined' && API.actOnLeave) {
-    API.actOnLeave(id, { action: status.toLowerCase() === 'approved' ? 'approve' : 'reject' }).catch(() => {});
+    API.actOnLeave(id, { action: status.toLowerCase() === 'approved' ? 'approve' : 'reject' }).catch(() => { });
   }
   leaveMessage = `${status === 'Approved' ? '✅ Granted' : '✖ Rejected'} leave for ${req.n.split(' · ')[0] || 'student'}.`;
   showToast(leaveMessage);
@@ -912,9 +912,9 @@ function renderStaffHome() {
             <button class="db-quick-chip" data-go="exams" type="button"><span>📝</span> Examinations</button>
             ${isHOD ? `<button class="db-quick-chip" data-go="classes" type="button"><span>📊</span> Classes Held</button>` : ''}
             ${canReview
-              ? `<button class="db-quick-chip" data-go="leave" type="button"><span>📋</span> Student Leaves ${pendingRequests ? `<b class="db-chip-badge">${pendingRequests}</b>` : ''}</button>`
-              : `<button class="db-quick-chip" data-go="leave" type="button"><span>🏖️</span> My Leave</button>`
-            }
+      ? `<button class="db-quick-chip" data-go="leave" type="button"><span>📋</span> Student Leaves ${pendingRequests ? `<b class="db-chip-badge">${pendingRequests}</b>` : ''}</button>`
+      : `<button class="db-quick-chip" data-go="leave" type="button"><span>🏖️</span> My Leave</button>`
+    }
             <button class="db-quick-chip" data-go="notices" type="button"><span>📢</span> Notices</button>
           </div>
         </div>
@@ -1475,7 +1475,7 @@ function refreshPrinHome() {
 }
 
 // ----- Interactive Action Handlers -----
-window.actHodLeave = async function(id, status, isShort) {
+window.actHodLeave = async function (id, status, isShort) {
   const activePg = (appData.tab === 'leave') ? $('pg-leave') : $('pg-home');
   const noteEl = (activePg && activePg.querySelector(`#hod-note-${id}`)) || $(`hod-note-${id}`);
   const action_note = noteEl ? noteEl.value.trim() : '';
@@ -1495,7 +1495,7 @@ window.actHodLeave = async function(id, status, isShort) {
   }
 };
 
-window.actPrincipalLeave = async function(id, status) {
+window.actPrincipalLeave = async function (id, status) {
   const activePg = (appData.tab === 'leave') ? $('pg-leave') : $('pg-home');
   const noteEl = (activePg && activePg.querySelector(`#prin-note-${id}`)) || $(`prin-note-${id}`);
   const action_note = noteEl ? noteEl.value.trim() : '';
@@ -1512,12 +1512,12 @@ window.actPrincipalLeave = async function(id, status) {
   }
 };
 
-window.toggleHodTimetableForm = function() {
+window.toggleHodTimetableForm = function () {
   hodTimetableFormOpen = !hodTimetableFormOpen;
   refreshHodHome();
 };
 
-window.submitTimetableAdjustment = async function(e) {
+window.submitTimetableAdjustment = async function (e) {
   if (e && e.preventDefault) e.preventDefault();
   const form = $('hod-tt-form');
   if (!form) return;
@@ -1555,12 +1555,12 @@ window.submitTimetableAdjustment = async function(e) {
   }
 };
 
-window.toggleHodNoticeForm = function() {
+window.toggleHodNoticeForm = function () {
   hodNoticeFormOpen = !hodNoticeFormOpen;
   refreshHodHome();
 };
 
-window.submitHodDeptNotice = function(e) {
+window.submitHodDeptNotice = function (e) {
   if (e && e.preventDefault) e.preventDefault();
   const myD = myDeptName();
   const title = $('hod-nt-title') ? $('hod-nt-title').value.trim() : '';
@@ -1584,7 +1584,7 @@ window.submitHodDeptNotice = function(e) {
   refreshHodHome();
 };
 
-window.triggerPrincipalSlaRun = async function() {
+window.triggerPrincipalSlaRun = async function () {
   const btn = $('btn-prin-sla');
   if (btn) btn.disabled = true;
   try {
@@ -1602,7 +1602,7 @@ window.triggerPrincipalSlaRun = async function() {
   }
 };
 
-window.actOnEscalation = async function(id, status) {
+window.actOnEscalation = async function (id, status) {
   const noteEl = $(`esc-note-${id}`);
   const action_note = noteEl ? noteEl.value.trim() : 'Executive resolution by Principal';
   try {
@@ -1617,12 +1617,12 @@ window.actOnEscalation = async function(id, status) {
   }
 };
 
-window.setPrinLeavesViewMode = function(mode) {
+window.setPrinLeavesViewMode = function (mode) {
   prinLeavesViewMode = mode;
   refreshPrinHome();
 };
 
-window.filterPrinAudit = function() {
+window.filterPrinAudit = function () {
   const act = $('prin-audit-act') ? $('prin-audit-act').value : '';
   const usr = $('prin-audit-usr') ? $('prin-audit-usr').value.trim() : '';
   const dt = $('prin-audit-dt') ? $('prin-audit-dt').value.trim() : '';
@@ -1631,7 +1631,7 @@ window.filterPrinAudit = function() {
   loadPrincipalDashboardData();
 };
 
-window.updateComplaintStatusHOD = async function(cid) {
+window.updateComplaintStatusHOD = async function (cid) {
   const sel = $(`hod-cmp-st-${cid}`);
   const noteEl = $(`hod-cmp-note-${cid}`);
   const st = sel ? sel.value : 'In Progress';
@@ -1648,13 +1648,13 @@ window.updateComplaintStatusHOD = async function(cid) {
   }
 };
 
-window.openIssueCertificateDialog = function(studentRoll = '', defaultTitle = '', defaultDesc = '') {
+window.openIssueCertificateDialog = function (studentRoll = '', defaultTitle = '', defaultDesc = '') {
   const roll = prompt('Enter Student Roll Number for Certificate Issuance:', studentRoll || '');
   if (!roll) return;
   const title = prompt('Enter Certificate Title (e.g. Smart Odisha Hackathon 1st Place):', defaultTitle || 'Academic Excellence Award');
   if (!title) return;
   const desc = prompt('Enter Description / Details:', defaultDesc || 'Awarded for exceptional performance.') || '';
-  
+
   API.issueCertificate({
     student_id: roll.trim(),
     title: title.trim(),
@@ -1670,7 +1670,7 @@ window.openIssueCertificateDialog = function(studentRoll = '', defaultTitle = ''
   });
 };
 
-window.openRevokeCertificateDialog = function(certId) {
+window.openRevokeCertificateDialog = function (certId) {
   const reason = prompt('Enter reason for revoking this certificate:');
   if (!reason) return;
   API.revokeCertificate(certId, reason.trim()).then(res => {
@@ -1783,9 +1783,9 @@ function renderHODHome() {
           </div>
 
           ${hodTimetableLoading ? renderLoadingState('Loading timetable changes…') : (
-            ttChanges.length === 0
-              ? renderEmptyState('📅', 'No Adjustments Posted', 'All departmental classes are following the regular semester timetable schedule.')
-              : `<div style="display:flex;flex-direction:column;gap:10px;">
+      ttChanges.length === 0
+        ? renderEmptyState('📅', 'No Adjustments Posted', 'All departmental classes are following the regular semester timetable schedule.')
+        : `<div style="display:flex;flex-direction:column;gap:10px;">
                   ${ttChanges.map(adj => `
                     <div class="timetable-change-card">
                       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
@@ -1802,7 +1802,7 @@ function renderHODHome() {
                     </div>
                   `).join('')}
                 </div>`
-          )}
+    )}
         </div>
 
         <!-- CARD 3: DEPARTMENT NOTICES -->
@@ -1820,8 +1820,8 @@ function renderHODHome() {
 
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${deptNotices.length === 0
-              ? renderEmptyState('📢', 'No Department Notices', `No notices have been issued yet specifically for Dept:${escapeHtml(myD)}.`)
-              : deptNotices.slice(0, 5).map(n => `
+      ? renderEmptyState('📢', 'No Department Notices', `No notices have been issued yet specifically for Dept:${escapeHtml(myD)}.`)
+      : deptNotices.slice(0, 5).map(n => `
                 <div style="border-left:3px solid var(--accent);padding:8px 12px;background:rgba(0,0,0,0.02);border-radius:0 8px 8px 0">
                   <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap">
                     <b>${escapeHtml(n[1])}</b>
@@ -1849,9 +1849,9 @@ function renderHODHome() {
           <p class="sub" style="margin:0 0 10px">Read-only oversight of attendance sessions in ${escapeHtml(myD)}. Audited institutional tracking for NAAC/NBA compliance.</p>
 
           ${hodAlertsLoading ? renderLoadingState('Calculating attendance percentages…') : (
-            alertsList.length === 0
-              ? renderEmptyState('✅', 'Attendance Threshold Satisfied', `All monitored students in ${escapeHtml(myD)} currently maintain 75% or higher attendance.`)
-              : `<div style="display:flex;flex-direction:column;gap:8px;">
+      alertsList.length === 0
+        ? renderEmptyState('✅', 'Attendance Threshold Satisfied', `All monitored students in ${escapeHtml(myD)} currently maintain 75% or higher attendance.`)
+        : `<div style="display:flex;flex-direction:column;gap:8px;">
                   ${alertsList.map(a => `
                     <div class="attendance-alert-row">
                       <div style="display:flex;flex-direction:column">
@@ -1865,7 +1865,7 @@ function renderHODHome() {
                     </div>
                   `).join('')}
                 </div>`
-          )}
+    )}
         </div>
 
         <!-- CARD 5: COMPLAINTS -->
@@ -1883,9 +1883,9 @@ function renderHODHome() {
           <p class="sub" style="margin:0 0 10px">Review College/Academic complaints from ${escapeHtml(myD)} students. Anonymous complaints strictly mask student identities.</p>
 
           ${hodComplaintsLoading ? renderLoadingState('Loading department complaints…') : (
-            deptComplaints.length === 0
-              ? renderEmptyState('✨', 'No Open Grievances', `There are no unresolved academic complaints for ${escapeHtml(myD)}.`)
-              : `<div style="display:flex;flex-direction:column;gap:10px;">
+      deptComplaints.length === 0
+        ? renderEmptyState('✨', 'No Open Grievances', `There are no unresolved academic complaints for ${escapeHtml(myD)}.`)
+        : `<div style="display:flex;flex-direction:column;gap:10px;">
                   ${deptComplaints.map(c => `
                     <div class="approval-item">
                       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
@@ -1901,7 +1901,7 @@ function renderHODHome() {
                     </div>
                   `).join('')}
                 </div>`
-          )}
+    )}
         </div>
       </div>
 
@@ -1996,9 +1996,9 @@ function renderPrincipalHome() {
           <p class="sub" style="margin:0 0 10px">Active student/staff grievances exceeding SLA deadlines and automated escalation requests transferred for Principal intervention.</p>
 
           ${prinEscalationsLoading ? renderLoadingState('Loading escalation records…') : (
-            escalations.length === 0
-              ? renderEmptyState('🎉', 'Zero Escalations Active', 'No complaints have breached SLA thresholds. All campus operations running smoothly.')
-              : `<div class="approval-list">
+      escalations.length === 0
+        ? renderEmptyState('🎉', 'Zero Escalations Active', 'No complaints have breached SLA thresholds. All campus operations running smoothly.')
+        : `<div class="approval-list">
                   ${escalations.map(esc => `
                     <div class="approval-item">
                       <div class="approval-item-top">
@@ -2013,7 +2013,7 @@ function renderPrincipalHome() {
                     </div>
                   `).join('')}
                 </div>`
-          )}
+    )}
         </div>
 
         <!-- CARD 3: ANALYTICS DASHBOARD (READ-ONLY, COLLEGE-WIDE) -->
@@ -2029,15 +2029,15 @@ function renderPrincipalHome() {
           </div>
 
           ${prinAnalyticsLoading ? renderLoadingState('Aggregating institutional telemetry…') : (() => {
-            const adm = an.admin || {};
-            const att = an.attendance || {};
-            const comp = adm.complaints || {};
-            const recur = an.recurring || {};
-            const mess = an.mess || {};
-            const opps = an.opportunities || {};
-            const lvs = adm.leaves || {};
+      const adm = an.admin || {};
+      const att = an.attendance || {};
+      const comp = adm.complaints || {};
+      const recur = an.recurring || {};
+      const mess = an.mess || {};
+      const opps = an.opportunities || {};
+      const lvs = adm.leaves || {};
 
-            return `
+      return `
               <div style="display:flex;flex-direction:column;gap:14px;">
                 <!-- Telemetry Grid -->
                 <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px">
@@ -2154,15 +2154,15 @@ function renderPrincipalHome() {
                     <span class="chip" style="font-size:11px;color:#dc2626">Rejected: <b>${lvs.rejected_cnt || (prinAllLeaves ? prinAllLeaves.filter(x => x.status === 'Rejected').length : 0)}</b></span>
                   </div>
                   ${prinAllLeaves && prinAllLeaves.length ? (() => {
-                    const depts = {};
-                    prinAllLeaves.forEach(lv => {
-                      const d = (lv.dept || 'General').toUpperCase();
-                      if (!depts[d]) depts[d] = { pending: 0, approved: 0, rejected: 0 };
-                      if (lv.status === 'Pending') depts[d].pending++;
-                      else if (lv.status === 'Approved') depts[d].approved++;
-                      else if (lv.status === 'Rejected') depts[d].rejected++;
-                    });
-                    return `
+          const depts = {};
+          prinAllLeaves.forEach(lv => {
+            const d = (lv.dept || 'General').toUpperCase();
+            if (!depts[d]) depts[d] = { pending: 0, approved: 0, rejected: 0 };
+            if (lv.status === 'Pending') depts[d].pending++;
+            else if (lv.status === 'Approved') depts[d].approved++;
+            else if (lv.status === 'Rejected') depts[d].rejected++;
+          });
+          return `
                       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:8px">
                         ${Object.keys(depts).map(d => `
                           <div style="background:rgba(255,255,255,0.6);padding:6px 10px;border-radius:8px;font-size:11.5px">
@@ -2172,7 +2172,7 @@ function renderPrincipalHome() {
                         `).join('')}
                       </div>
                     `;
-                  })() : ''}
+        })() : ''}
                 </div>
 
                 <!-- 5. Placement: Opportunities, Applications, Recruiter Requests -->
@@ -2198,7 +2198,7 @@ function renderPrincipalHome() {
                 </div>
               </div>
             `;
-          })()}
+    })()}
         </div>
 
         <!-- CARD 4: AUDIT LOG -->
@@ -2233,9 +2233,9 @@ function renderPrincipalHome() {
           </div>
 
           ${prinAuditLoading ? renderLoadingState('Loading audit trail…') : (
-            auditLogs.length === 0
-              ? renderEmptyState('🔍', 'No Audit Records Match', 'Try loosening your action, actor, or date filters.')
-              : `<div class="audit-table-wrap" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:10px">
+      auditLogs.length === 0
+        ? renderEmptyState('🔍', 'No Audit Records Match', 'Try loosening your action, actor, or date filters.')
+        : `<div class="audit-table-wrap" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:10px">
                   <table class="audit-table">
                     <thead>
                       <tr>
@@ -2257,7 +2257,7 @@ function renderPrincipalHome() {
                     </tbody>
                   </table>
                 </div>`
-          )}
+    )}
         </div>
 
         <!-- CARD 5: COLLEGE-WIDE NOTICES -->
@@ -2341,19 +2341,19 @@ function renderHODLeavePage() {
       </div>
       <p class="sub" style="margin:0 0 12px">Review leave requests from students and staff in your department only. Short leave (≤ 3 days) approval is final. Long leave (> 3 days) moves to the Principal as Pending.</p>
       ${hodLeavesLoading ? renderLoadingState('Loading department leave requests…') : (
-        pendingLeaves.length === 0
-          ? renderEmptyState('🎉', 'No Pending Leaves', `All leave requests from students and staff in ${escapeHtml(myD)} have been decided.`)
-          : `<div class="approval-list">
+      pendingLeaves.length === 0
+        ? renderEmptyState('🎉', 'No Pending Leaves', `All leave requests from students and staff in ${escapeHtml(myD)} have been decided.`)
+        : `<div class="approval-list">
               ${pendingLeaves.map(lv => {
-                const curUser = (sessionStorage.getItem('cc_user') || '').toLowerCase();
-                const isOwn = (lv.login_id && lv.login_id.toLowerCase() === curUser) ||
-                              (lv.user_id && String(lv.user_id).toLowerCase() === curUser);
-                const isWaitingPrin = lv.stage === 'Waiting for Principal';
-                const isShort = (lv.days || 1) <= 3;
-                const daysLabel = isShort
-                  ? `${lv.days} day(s) · Short Leave (HOD Final Approval)`
-                  : `${lv.days} day(s) · Long Leave (Forwarded to Principal)`;
-                return `
+          const curUser = (sessionStorage.getItem('cc_user') || '').toLowerCase();
+          const isOwn = (lv.login_id && lv.login_id.toLowerCase() === curUser) ||
+            (lv.user_id && String(lv.user_id).toLowerCase() === curUser);
+          const isWaitingPrin = lv.stage === 'Waiting for Principal';
+          const isShort = (lv.days || 1) <= 3;
+          const daysLabel = isShort
+            ? `${lv.days} day(s) · Short Leave (HOD Final Approval)`
+            : `${lv.days} day(s) · Long Leave (Forwarded to Principal)`;
+          return `
                   <div class="approval-item">
                     <div class="approval-item-top">
                       <div class="approval-item-person">
@@ -2378,7 +2378,7 @@ function renderHODLeavePage() {
                       <b>Reason (${escapeHtml(lv.leave_type)}):</b> ${escapeHtml(lv.reason || 'Not specified')}
                     </div>
                     ${isOwn ? `<p class="sub" style="color:var(--red)">⚠️ This is your own leave application. Department Heads cannot decide their own leave.</p>` :
-                      isWaitingPrin ? `<p class="sub" style="color:var(--accent);font-weight:600">⏳ Already forwarded to Principal for sanction. (Waiting for Principal)</p>` : `
+              isWaitingPrin ? `<p class="sub" style="color:var(--accent);font-weight:600">⏳ Already forwarded to Principal for sanction. (Waiting for Principal)</p>` : `
                       <input type="text" id="hod-note-${lv.id}" class="approval-note-input" placeholder="Decision note / comments (optional)…">
                       <div class="approval-btn-group">
                         <button class="btn sm" onclick="actHodLeave(${lv.id}, 'Approved', ${isShort})" type="button">
@@ -2391,9 +2391,9 @@ function renderHODLeavePage() {
                     `}
                   </div>
                 `;
-              }).join('')}
+        }).join('')}
             </div>`
-      )}
+    )}
     </div>
   `;
 
@@ -2402,10 +2402,10 @@ function renderHODLeavePage() {
     (mine.length
       ? mine.map(r =>
         `<div class="item">` +
-          `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s)}</div>` +
-          `<p>${rangeText(r)}</p>` +
-          `<p style="margin:4px 0">${escapeHtml(r.r)}</p>` +
-          (r.by ? `<p style="margin-top:6px;font-size:12px;font-weight:600">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b></p>` : '') +
+        `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s)}</div>` +
+        `<p>${rangeText(r)}</p>` +
+        `<p style="margin:4px 0">${escapeHtml(r.r)}</p>` +
+        (r.by ? `<p style="margin-top:6px;font-size:12px;font-weight:600">${r.s === 'Approved' ? '✔' : '✖'} ${r.s} by <b>${escapeHtml(r.by)}</b></p>` : '') +
         `</div>`
       ).join('')
       : '<p class="sub">No personal requests yet.</p>') + `</div>`;
@@ -2442,11 +2442,11 @@ function renderPrincipalLeavePage() {
       <p class="sub" style="margin:0 0 12px">Review leave requests waiting for second-level Principal executive sanction or inspect all college leaves.</p>
 
       ${prinLeavesLoading ? renderLoadingState('Loading leave applications…') : (() => {
-        const list = prinLeavesViewMode === 'waiting' ? waitingLeaves : (prinAllLeaves || []);
-        if (list.length === 0) {
-          return renderEmptyState('✅', prinLeavesViewMode === 'waiting' ? 'No Leaves Waiting for Sanction' : 'No Leaves Recorded', 'All multi-day and escalated leaves have been reviewed.');
-        }
-        return `
+      const list = prinLeavesViewMode === 'waiting' ? waitingLeaves : (prinAllLeaves || []);
+      if (list.length === 0) {
+        return renderEmptyState('✅', prinLeavesViewMode === 'waiting' ? 'No Leaves Waiting for Sanction' : 'No Leaves Recorded', 'All multi-day and escalated leaves have been reviewed.');
+      }
+      return `
           <div class="approval-list">
             ${list.map(lv => `
               <div class="approval-item">
@@ -2480,7 +2480,7 @@ function renderPrincipalLeavePage() {
             `).join('')}
           </div>
         `;
-      })()}
+    })()}
     </div>
   `;
 }
@@ -3234,8 +3234,8 @@ function recordGateCheck(id, action) {
 
 function renderGatePassSheet(id) {
   const req = (typeof studentApprovals !== 'undefined' && studentApprovals.find(r => r.id === id)) ||
-              (leaveRequests && leaveRequests.student && leaveRequests.student.find(r => r.id === id)) ||
-              (leaveRequests && leaveRequests.staff && leaveRequests.staff.find(r => r.id === id));
+    (leaveRequests && leaveRequests.student && leaveRequests.student.find(r => r.id === id)) ||
+    (leaveRequests && leaveRequests.staff && leaveRequests.staff.find(r => r.id === id));
   if (!req) {
     return `<div style="padding:24px;text-align:center"><p class="sub">Gate Pass record not found for reference #${escapeHtml(id)}</p><button class="btn sm" data-close type="button">Close</button></div>`;
   }
@@ -3735,9 +3735,9 @@ function renderEventCards() {
     if (eventsSearchQuery) {
       const q = eventsSearchQuery.toLowerCase();
       const match = e.title.toLowerCase().includes(q) ||
-                    e.desc.toLowerCase().includes(q) ||
-                    e.venue.toLowerCase().includes(q) ||
-                    (e.tags && e.tags.some(t => t.toLowerCase().includes(q)));
+        e.desc.toLowerCase().includes(q) ||
+        e.venue.toLowerCase().includes(q) ||
+        (e.tags && e.tags.some(t => t.toLowerCase().includes(q)));
       if (!match) return false;
     }
     return true;
@@ -4152,7 +4152,7 @@ async function syncQueue() {
           markMessage = `⚡ Synced ${res.synced} offline attendance batch(es) with central server!`;
           render();
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }
   saveQueue();
@@ -4581,9 +4581,9 @@ function filterDeptClasses(list) {
     if (hodClassSearchQuery) {
       const q = hodClassSearchQuery.toLowerCase();
       const match = c.name.toLowerCase().includes(q) ||
-                    c.code.toLowerCase().includes(q) ||
-                    c.faculty.toLowerCase().includes(q) ||
-                    (c.room && c.room.toLowerCase().includes(q));
+        c.code.toLowerCase().includes(q) ||
+        c.faculty.toLowerCase().includes(q) ||
+        (c.room && c.room.toLowerCase().includes(q));
       if (!match) return false;
     }
     return true;
@@ -5330,7 +5330,7 @@ function fileComplaint(force) {
       description: txt,
       location: loc,
       is_anonymous: false
-    }).catch(() => {});
+    }).catch(() => { });
   }
   complaintDraft = { cat: isHostelStudent ? 'Hostel' : 'College', loc: isHostelStudent ? 'Block A' : 'Library', txt: '' };
   duplicateIndex = -1;
@@ -6286,7 +6286,7 @@ async function loadAccounts() {
     accountsLoading = false;
   }
   if (accQuery || accRoleFilter) {
-    try { await runAccSearch(); } catch (err) {}
+    try { await runAccSearch(); } catch (err) { }
   }
   render();
 }
@@ -7020,9 +7020,9 @@ function renderAccountCard(u) {
       </div>
       <div class="ac-card-actions">
         ${u.has_login === false
-          ? `<button class="btn sm" data-acc="prefill" data-who="${who(u)}" type="button">Create login</button>`
-          : pwEditing === u.login_id
-          ? `<div class="ac-pw-box">
+      ? `<button class="btn sm" data-acc="prefill" data-who="${who(u)}" type="button">Create login</button>`
+      : pwEditing === u.login_id
+        ? `<div class="ac-pw-box">
               <label for="acnewpw">New password</label>
               <div class="ac-pw-input-row">
                 <input id="acnewpw" autocomplete="off" placeholder="At least 6 characters">
@@ -7034,11 +7034,11 @@ function renderAccountCard(u) {
                 <button class="btn ghost sm" data-acc="pwcancel" type="button">Cancel</button>
               </div>
             </div>`
-          : `<div class="btns" style="gap:6px">
+        : `<div class="btns" style="gap:6px">
               <button class="btn ghost sm" data-acc="pw" data-who="${who(u)}" type="button">Set password</button>
               ${u.me ? '' : `<button class="btn ghost sm ac-rm-btn" data-acc="rm" data-who="${who(u)}" type="button">${accRemoveConfirm === u.login_id ? 'Tap again to confirm' : 'Remove'}</button>`}
             </div>`
-        }
+    }
       </div>
     </div>
   `;
@@ -7404,7 +7404,7 @@ function submitAchievement() {
       date: $('adt').value || todayIso(),
       description: $('ads').value.trim(),
       link
-    }).catch(() => {});
+    }).catch(() => { });
   }
   achievementMessage = '✅ Posted. A teacher will verify it soon.';
   render();
@@ -7575,67 +7575,67 @@ function renderWardenHome() {
 
   return `<div class="db-page">` +
     `<div class="db-hero-card">` +
-      `<div class="db-hero-avatar">🏠</div>` +
-      `<div class="db-hero-body">` +
-        `<div class="db-hero-top">` +
-          `<h2 class="db-hero-name">${greetingHtml()}, ${displayName()} 👋</h2>` +
-          `<div class="db-badges">` +
-            `<span class="db-role-badge staff">Hostel Warden</span>` +
-            `<span class="db-campus-pill">🏰 ${escapeHtml(hName)}</span>` +
-            `<span class="db-live-pill"><span class="db-pulse-dot"></span> On Duty</span>` +
-          `</div>` +
-        `</div>` +
-        `<p class="db-hero-sub">Hostel discipline &amp; safety supervisor · Night roll calls, cleanliness oversight &amp; mess management</p>` +
-      `</div>` +
+    `<div class="db-hero-avatar">🏠</div>` +
+    `<div class="db-hero-body">` +
+    `<div class="db-hero-top">` +
+    `<h2 class="db-hero-name">${greetingHtml()}, ${displayName()} 👋</h2>` +
+    `<div class="db-badges">` +
+    `<span class="db-role-badge staff">Hostel Warden</span>` +
+    `<span class="db-campus-pill">🏰 ${escapeHtml(hName)}</span>` +
+    `<span class="db-live-pill"><span class="db-pulse-dot"></span> On Duty</span>` +
+    `</div>` +
+    `</div>` +
+    `<p class="db-hero-sub">Hostel discipline &amp; safety supervisor · Night roll calls, cleanliness oversight &amp; mess management</p>` +
+    `</div>` +
     `</div>` +
     (wardenActionMsg ? `<div class="item" style="margin-bottom:14px;border-color:#10b981;color:#10b981;background:rgba(16,185,129,0.08);border-radius:12px;padding:12px 16px;"><b>${escapeHtml(wardenActionMsg)}</b></div>` : '') +
     `<div class="db-quick-bar">` +
-      `<span class="db-quick-label">ACTIONS</span>` +
-      `<div class="db-quick-chips">` +
-        `<button type="button" class="db-quick-chip" data-go="attendance">📋 Night Attendance</button>` +
-        `<button type="button" class="db-quick-chip" data-go="exams">📝 Exam Schedule</button>` +
-        `<button type="button" class="db-quick-chip" data-go="leave">🏖️ My Leave</button>` +
-        `<button type="button" class="db-quick-chip" data-go="complaints">🔍 Complaints &amp; Reviews</button>` +
-        `<button type="button" class="db-quick-chip" data-go="notices">📢 Post Notice</button>` +
-        `<button type="button" class="db-quick-chip" data-go="students">👥 Resident Roster</button>` +
-      `</div>` +
+    `<span class="db-quick-label">ACTIONS</span>` +
+    `<div class="db-quick-chips">` +
+    `<button type="button" class="db-quick-chip" data-go="attendance">📋 Night Attendance</button>` +
+    `<button type="button" class="db-quick-chip" data-go="exams">📝 Exam Schedule</button>` +
+    `<button type="button" class="db-quick-chip" data-go="leave">🏖️ My Leave</button>` +
+    `<button type="button" class="db-quick-chip" data-go="complaints">🔍 Complaints &amp; Reviews</button>` +
+    `<button type="button" class="db-quick-chip" data-go="notices">📢 Post Notice</button>` +
+    `<button type="button" class="db-quick-chip" data-go="students">👥 Resident Roster</button>` +
+    `</div>` +
     `</div>` +
     `<div class="db-stats-grid">` +
-      `<button class="db-stat-tile tile-blue" data-go="students" type="button">` +
-        `<div class="db-tile-icon">👥</div>` +
-        `<div class="db-tile-num">${residentCount}</div>` +
-        `<div class="db-tile-label">Residents Registered</div>` +
-        `<div class="db-tile-sub">Hostel block ${escapeHtml(hName)}</div>` +
-        `<span class="db-tile-arrow">→</span>` +
-      `</button>` +
-      `<button class="db-stat-tile tile-emerald" data-go="attendance" type="button">` +
-        `<div class="db-tile-icon">📋</div>` +
-        `<div class="db-tile-num">${todaySession ? todaySession.present + ' / ' + todaySession.total : 'Pending'}</div>` +
-        `<div class="db-tile-label">Tonight's Roll Call</div>` +
-        `<div class="db-tile-sub">${todaySession ? 'Completed (' + percent(todaySession.present, todaySession.total) + ')' : 'Tap to take attendance'}</div>` +
-        `<span class="db-tile-arrow">→</span>` +
-      `</button>` +
-      `<button class="db-stat-tile tile-rose" data-go="complaints" type="button">` +
-        `<div class="db-tile-icon">⚠️</div>` +
-        `<div class="db-tile-num">${openComplaints}</div>` +
-        `<div class="db-tile-label">Hostel Complaints</div>` +
-        `<div class="db-tile-sub">Food, Mess &amp; Cleanliness</div>` +
-        `<span class="db-tile-arrow">→</span>` +
-      `</button>` +
-      `<button class="db-stat-tile tile-purple" data-go="complaints" data-wtab="reviews" type="button">` +
-        `<div class="db-tile-icon">⭐</div>` +
-        `<div class="db-tile-num">${avgFood}★ / ${avgClean}★</div>` +
-        `<div class="db-tile-label">Mess &amp; Hygiene Rating</div>` +
-        `<div class="db-tile-sub">Average student feedback</div>` +
-        `<span class="db-tile-arrow">→</span>` +
-      `</button>` +
-      `<button class="db-stat-tile tile-amber" data-go="attendance" type="button">` +
-        `<div class="db-tile-icon">🚪</div>` +
-        `<div class="db-tile-num">${residentsOnLeave}</div>` +
-        `<div class="db-tile-label">On Leave</div>` +
-        `<div class="db-tile-sub">Approved gate passes</div>` +
-        `<span class="db-tile-arrow">→</span>` +
-      `</button>` +
+    `<button class="db-stat-tile tile-blue" data-go="students" type="button">` +
+    `<div class="db-tile-icon">👥</div>` +
+    `<div class="db-tile-num">${residentCount}</div>` +
+    `<div class="db-tile-label">Residents Registered</div>` +
+    `<div class="db-tile-sub">Hostel block ${escapeHtml(hName)}</div>` +
+    `<span class="db-tile-arrow">→</span>` +
+    `</button>` +
+    `<button class="db-stat-tile tile-emerald" data-go="attendance" type="button">` +
+    `<div class="db-tile-icon">📋</div>` +
+    `<div class="db-tile-num">${todaySession ? todaySession.present + ' / ' + todaySession.total : 'Pending'}</div>` +
+    `<div class="db-tile-label">Tonight's Roll Call</div>` +
+    `<div class="db-tile-sub">${todaySession ? 'Completed (' + percent(todaySession.present, todaySession.total) + ')' : 'Tap to take attendance'}</div>` +
+    `<span class="db-tile-arrow">→</span>` +
+    `</button>` +
+    `<button class="db-stat-tile tile-rose" data-go="complaints" type="button">` +
+    `<div class="db-tile-icon">⚠️</div>` +
+    `<div class="db-tile-num">${openComplaints}</div>` +
+    `<div class="db-tile-label">Hostel Complaints</div>` +
+    `<div class="db-tile-sub">Food, Mess &amp; Cleanliness</div>` +
+    `<span class="db-tile-arrow">→</span>` +
+    `</button>` +
+    `<button class="db-stat-tile tile-purple" data-go="complaints" data-wtab="reviews" type="button">` +
+    `<div class="db-tile-icon">⭐</div>` +
+    `<div class="db-tile-num">${avgFood}★ / ${avgClean}★</div>` +
+    `<div class="db-tile-label">Mess &amp; Hygiene Rating</div>` +
+    `<div class="db-tile-sub">Average student feedback</div>` +
+    `<span class="db-tile-arrow">→</span>` +
+    `</button>` +
+    `<button class="db-stat-tile tile-amber" data-go="attendance" type="button">` +
+    `<div class="db-tile-icon">🚪</div>` +
+    `<div class="db-tile-num">${residentsOnLeave}</div>` +
+    `<div class="db-tile-label">On Leave</div>` +
+    `<div class="db-tile-sub">Approved gate passes</div>` +
+    `<span class="db-tile-arrow">→</span>` +
+    `</button>` +
     `</div>` +
     renderTodoWidget('warden', '📋 Warden Hostel Administration Works & Tasks') +
     renderNotifications() +
@@ -8017,7 +8017,7 @@ async function loadAdminAnalytics(force = false) {
   }
 }
 
-window.onCollectionSynced = function(key) {
+window.onCollectionSynced = function (key) {
   if (getRole() === 'admin' && typeof loadAdminAnalytics === 'function') {
     loadAdminAnalytics(true);
   }
@@ -8122,12 +8122,12 @@ function renderAdminOverviewContent(metrics) {
   const depts = (adminAnalyticsData && adminAnalyticsData.roster && adminAnalyticsData.roster.departments && adminAnalyticsData.roster.departments.length)
     ? adminAnalyticsData.roster.departments
     : [
-        { dept: 'CSE', students: metrics.totalStudents, faculty: Math.round(metrics.totalStaff * 0.4) },
-        { dept: 'ECE', students: 0, faculty: Math.round(metrics.totalStaff * 0.25) },
-        { dept: 'EEE', students: 0, faculty: Math.round(metrics.totalStaff * 0.15) },
-        { dept: 'MECHANICAL', students: 0, faculty: Math.round(metrics.totalStaff * 0.1) },
-        { dept: 'CIVIL', students: 0, faculty: Math.round(metrics.totalStaff * 0.1) }
-      ];
+      { dept: 'CSE', students: metrics.totalStudents, faculty: Math.round(metrics.totalStaff * 0.4) },
+      { dept: 'ECE', students: 0, faculty: Math.round(metrics.totalStaff * 0.25) },
+      { dept: 'EEE', students: 0, faculty: Math.round(metrics.totalStaff * 0.15) },
+      { dept: 'MECHANICAL', students: 0, faculty: Math.round(metrics.totalStaff * 0.1) },
+      { dept: 'CIVIL', students: 0, faculty: Math.round(metrics.totalStaff * 0.1) }
+    ];
 
   const recentEvents = (adminAnalyticsData && adminAnalyticsData.audit && adminAnalyticsData.audit.recent_events)
     ? adminAnalyticsData.audit.recent_events
@@ -8216,9 +8216,9 @@ function renderAdminOverviewContent(metrics) {
       </div>
       <div class="dept-analytics-grid">
         ${depts.slice(0, 6).map(d => {
-          const totalEnrollment = metrics.totalStudents || 1;
-          const sharePct = Math.min(100, Math.round(((d.students || 0) / totalEnrollment) * 100));
-          return `
+    const totalEnrollment = metrics.totalStudents || 1;
+    const sharePct = Math.min(100, Math.round(((d.students || 0) / totalEnrollment) * 100));
+    return `
             <div class="dept-analytics-card">
               <div class="dept-analytics-top">
                 <span class="dept-analytics-name">${escapeHtml(d.dept || 'General')}</span>
@@ -8239,7 +8239,7 @@ function renderAdminOverviewContent(metrics) {
               </div>
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
     </div>
 
@@ -8481,9 +8481,9 @@ function renderAdminHome() {
       </div>
 
       ${adminHomeTab === 'overview' ? renderAdminOverviewContent({
-        totalStudents, totalStaff, totalUsers, activeNotices, openComplaints, slaRate,
-        totalEvents, cid
-      }) : renderAdminAuditContent(cid)}
+    totalStudents, totalStaff, totalUsers, activeNotices, openComplaints, slaRate,
+    totalEvents, cid
+  }) : renderAdminAuditContent(cid)}
     </div>
   `;
 }
@@ -8830,9 +8830,9 @@ function myStaff() {
   const sPhoto = sessionStorage.getItem('cc_photo') || '';
   const defaultPos = rk === 'principal' ? 'Principal & Campus Director'
     : (rk === 'hod' ? 'Head of Department (HOD)'
-    : (rk === 'warden' ? 'Hostel Warden'
-    : (rk === 'placement_officer' ? 'Training & Placement Officer'
-    : 'Faculty Member')));
+      : (rk === 'warden' ? 'Hostel Warden'
+        : (rk === 'placement_officer' ? 'Training & Placement Officer'
+          : 'Faculty Member')));
   return {
     id: raw.toUpperCase() || (rk === 'principal' ? '9013' : '2401219013'),
     name: sName,
@@ -9024,7 +9024,7 @@ function rankPeople(list, q, hayFn, nameFn, idFn) {
     const name = norm(nameFn(p)), id = norm(idFn(p)), idClean = cleanId(idFn(p));
     const score = (name.startsWith(whole) || (wholeClean && idClean === wholeClean)) ? 0 :
       (id.startsWith(whole) || (wholeClean.length >= 2 && idClean.startsWith(wholeClean))) ? 1 :
-      name.split(/\s+/).some(w => w.startsWith(first)) ? 2 : 3;
+        name.split(/\s+/).some(w => w.startsWith(first)) ? 2 : 3;
     return { p, i, score };
   }).filter(Boolean).sort((a, b) => a.score - b.score || a.i - b.i).map(r => r.p);
 }
@@ -9746,7 +9746,7 @@ function submitIssue() {
       title: $('ity').value + ': ' + text.slice(0, 50),
       description: text,
       category: $('ity').value
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   $('sbody').innerHTML = `<div class="tick" style="margin-top:10px">✓</div>` +
@@ -11745,17 +11745,17 @@ function renderNotifications() {
   const items = buildNotifications();
   return `<div class="nbox" id="nfbox">` +
     `<div class="nhead">` +
-      `<h3><span aria-hidden="true">🔔</span> Notifications` +
-      (items.length ? `<span class="ncount">${items.length}</span>` : '') + `</h3>` +
-      (items.length ? `<button class="nclear-btn" data-nclear type="button">Clear all</button>` : '') +
+    `<h3><span aria-hidden="true">🔔</span> Notifications` +
+    (items.length ? `<span class="ncount">${items.length}</span>` : '') + `</h3>` +
+    (items.length ? `<button class="nclear-btn" data-nclear type="button">Clear all</button>` : '') +
     `</div>` +
     (items.length
       ? `<div class="nlist">` + items.map(x =>
         `<div class="ncard ${x.isNew ? 'new' : ''}" data-nid="${escapeHtml(x.id)}">` +
-          `<span class="ni" aria-hidden="true">${x.icon}</span>` +
-          `<div class="nb"><b>${escapeHtml(x.title)}</b><p>${escapeHtml(x.text)}</p></div>` +
-          `<button class="nl" data-go="${x.go}" type="button">View →</button>` +
-          `<button class="nx" data-ndis="1" type="button" aria-label="Dismiss">✕</button>` +
+        `<span class="ni" aria-hidden="true">${x.icon}</span>` +
+        `<div class="nb"><b>${escapeHtml(x.title)}</b><p>${escapeHtml(x.text)}</p></div>` +
+        `<button class="nl" data-go="${x.go}" type="button">View →</button>` +
+        `<button class="nx" data-ndis="1" type="button" aria-label="Dismiss">✕</button>` +
         `</div>`).join('') + `</div>`
       : `<div class="nempty-minimal"><span class="nempty-check">✓</span> All caught up · No unread notifications</div>`) +
     `</div>`;
