@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=g">
+<link rel="stylesheet" href="style.css?v=20261009j">
 </head>
 <body>
 
@@ -29,7 +29,7 @@
   <div class="phone" id="phoneBox" data-role="student"><div class="screen" id="scr"><div class="scr-in" id="scrIn">
    <div class="status"><span id="clock">9:41</span><span>● ● ▮</span></div>
    <div id="formPane" style="display:flex;flex-direction:column;gap:12px">
-    <div class="logo" id="roleLogo">🎓</div>
+    <div class="logo" id="roleLogo" title="Role icon"><span class="logo-emoji">🎓</span></div>
     <h2 class="brand-font">Campbit</h2><p>Your campus, in your pocket</p>
     <h2 id="greet" style="margin-top:8px">Welcome back</h2><p id="roleHint">Sign in as a student</p>
     <div class="seg" id="seg" role="tablist"><button type="button" class="on" data-role="student">Student</button>
@@ -59,6 +59,7 @@
 <div class="menu" role="menu"><button role="menuitem" data-sheet="about" type="button"><span aria-hidden="true">ℹ️</span> About us</button>
 <button role="menuitem" data-sheet="complaint" type="button"><span aria-hidden="true">📝</span> Complaint box</button>
 <button role="menuitem" data-sheet="issue" type="button"><span aria-hidden="true">🐞</span> Report an issue</button>
+<button role="menuitem" data-sheet="sos" type="button"><span aria-hidden="true">🚨</span> Emergency SOS &amp; Helpline</button>
 </div></div><a class="brand" href="#" data-go="home">🎓 Campbit</a></div>
 <div class="gsearch" id="gsearch" role="search"><span class="gicon" aria-hidden="true">🔍</span>
 <input id="gq" type="search" placeholder="Search pages, notices, results…" autocomplete="off" enterkeyhint="search" aria-label="Search Campbit" aria-controls="gres" aria-expanded="false" aria-autocomplete="list">
@@ -72,7 +73,9 @@
  <main class="wrap">
   <section class="pg" id="pg-home"></section>
   <section class="pg hidden" id="pg-timetable"></section>
+  <section class="pg hidden" id="pg-classes"></section>
   <section class="pg hidden" id="pg-attendance"></section>
+  <section class="pg hidden" id="pg-exams"></section>
   <section class="pg hidden" id="pg-results"></section>
   <section class="pg hidden" id="pg-fees"></section>
   <section class="pg hidden" id="pg-opps"></section>
@@ -84,15 +87,16 @@
   <section class="pg hidden" id="pg-achievements"></section>
   <section class="pg hidden" id="pg-notices"></section>
   <section class="pg hidden" id="pg-holidays"></section>
-  <section class="pg hidden" id="pg-scholarships"></section>
   <section class="pg hidden" id="pg-leave"></section>
-  <section class="pg hidden" id="pg-resume"></section>
+  <section class="pg hidden" id="pg-events"></section>
   <section class="pg hidden" id="pg-resources"></section>
   <section class="pg hidden" id="pg-recruit"></section>
   <section class="pg hidden" id="pg-profile"></section>
  </main>
  <footer>© 2026 Campbit · Demo data for preview only.</footer>
 </div>
+
+<button class="floating-sos-btn" data-sheet="sos" type="button" aria-label="Campus Emergency SOS" title="Campus Emergency SOS"><span class="sos-pulse-ring"></span>🚨 <span class="sos-label">SOS</span></button>
 
 <div id="sheet" class="sheet hidden"><div class="sback" data-close></div>
 <div class="spanel" role="dialog" aria-modal="true" aria-label="Details">
@@ -109,7 +113,14 @@
 <div class="dlinks" id="dlinks"></div>
 </nav></div>
 
-<script src="api.js?v=g"></script>
-<script src="script.js?v=g"></script>
+<script src="api.js?v=20261009j"></script>
+<script src="script.js?v=20261009j"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  });
+}
+</script>
 </body>
 </html>
