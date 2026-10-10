@@ -12525,3 +12525,15 @@ $('logout').onclick = async () => {
   } catch (e) { }
   showLogin();
 };
+
+   // Refresh recruiter requests for students without needing a page reload
+   setInterval(async () => {
+     if (getRole() !== 'student' || recBusy || document.hidden) return;
+     try {
+       const s = await API.request('/api/me/recruiting');
+       if (!recState || JSON.stringify(s.requests) !== JSON.stringify(recState.requests)) {
+         recState = s;
+         render();
+       }
+     } catch (e) { }
+   }, 30000);
