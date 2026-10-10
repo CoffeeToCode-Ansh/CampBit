@@ -105,6 +105,39 @@ const accountName = () => {
 
 const cleanId = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// Quick preset selection helper: populates or appends ideas into form fields
+function applyPreset(targetId, val, extra) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  if (extra === 'append') {
+    const cur = el.value.trim();
+    const parts = cur ? cur.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (!parts.includes(val)) {
+      parts.push(val);
+      el.value = parts.join(', ');
+    }
+  } else {
+    el.value = val;
+    if (targetId === 'lr') {
+      const lt = document.getElementById('lt');
+      if (lt && extra) lt.value = extra;
+    } else if (targetId === 'cftxt') {
+      const cat = document.getElementById('cfcat');
+      if (cat && extra) cat.value = extra;
+    } else if (targetId === 'ctext') {
+      const ccat = document.getElementById('ccat');
+      if (ccat && extra) ccat.value = extra;
+    } else if (targetId === 'atl') {
+      const acat = document.getElementById('acat');
+      if (acat && extra) acat.value = extra;
+      const ads = document.getElementById('ads');
+      if (ads && !ads.value.trim()) ads.value = 'Successfully completed and achieved ' + val;
+    }
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.focus();
+}
+
 // Department of the signed-in account (set at login or from TEACHERS list)
 const accountDept = () => {
   try {
@@ -658,6 +691,17 @@ function renderLeave() {
     `<div><label for="lf">From</label><input type="date" id="lf" min="${todayIso()}" value="${todayIso()}"></div>` +
     `<div><label for="lto">To</label><input type="date" id="lto" min="${todayIso()}" value="${todayIso()}"></div>` +
     `</div>` +
+    `<div class="form-preset-wrap">` +
+    `<span class="preset-label">💡 Common Leave Reasons (tap to select):</span>` +
+    `<div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="lr:Viral Fever &amp; Medical Rest:Medical">🩺 Viral Fever &amp; Rest</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Family Function &amp; Sibling Wedding:Casual">👨‍👩‍👧 Family Wedding</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Urgent Personal Work at Hometown:Casual">🏡 Hometown Work</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Attending Technical Hackathon / Workshop:Duty">💻 Hackathon / Project</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Outstation Travel &amp; Semester Break Pass:Vacation">🚆 Semester Break</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Appearing for Competitive Exam:Duty">📝 Competitive Exam</button>` +
+    `<button type="button" class="preset-chip" data-preset="lr:Hostel Weekend Outing Pass:Casual">🏠 Weekend Pass</button>` +
+    `</div></div>` +
     `<label for="lr">Reason</label><textarea id="lr" placeholder="Briefly explain the reason"></textarea>` +
     `<div class="err" id="lerr" role="alert"></div>` +
     `<button class="btn" id="lsub" type="button" style="width:100%">Submit request</button></div>`;
@@ -3132,6 +3176,16 @@ function renderComplaintBox() {
     `<div class="frm">` +
     `<label for="ccat">Category</label>` +
     `<select id="ccat"><option>Academics</option><option>Hostel</option><option>Fees</option><option>Safety / Harassment</option><option>Facilities</option><option>Other</option></select>` +
+    `<div class="form-preset-wrap">` +
+    `<span class="preset-label">💡 Common Topics (tap to fill):</span>` +
+    `<div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Hostel drinking water RO dispenser broken and unhygienic:Facilities">🚰 RO Purifier Issue</button>` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Streetlights outside hostel pathway broken and dark:Safety / Harassment">💡 Broken Streetlights</button>` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Discrepancy observed in internal marks evaluation:Academics">⚖️ Internal Marks Grading</button>` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Cafeteria hygiene and food preparation need inspection:Facilities">🍽️ Cafeteria Hygiene</button>` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Hostel common washrooms require deep sanitization:Hostel">🧹 Washroom Cleaning</button>` +
+    `<button type="button" class="preset-chip" data-preset="ctext:Unexpected penalty fees levied without prior university notice:Fees">💰 Fee Grievance</button>` +
+    `</div></div>` +
     `<label for="ctext">Describe your complaint</label>` +
     `<textarea id="ctext" placeholder="Write what happened, where and when. Do not include your name."></textarea>` +
     `<div class="err" id="cerr" role="alert"></div>` +
@@ -5238,7 +5292,81 @@ let wardenReviewFilter = 'All';
 let wardenActionMsg = '';
 let studentReviewMsg = '';
 
+let communityComplaints = [];
+let communityLoading = false;
+async function loadCommunityComplaints() {
+  if (communityLoading) return;
+  communityLoading = true;
+  try {
+    if (typeof API !== 'undefined' && API.getCommunityComplaints) {
+      const res = await API.getCommunityComplaints();
+      if (Array.isArray(res)) communityComplaints = res;
+    }
+  } catch (e) {
+    console.warn('Community complaints error:', e);
+  } finally {
+    communityLoading = false;
+    if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+  }
+}
+
+async function toggleComplaintOpinion(cid, defaultOpinion = 'Me Too') {
+  try {
+    const item = (communityComplaints || []).find(c => String(c.id) === String(cid));
+    if (item && item.my_opinion) {
+      if (typeof API !== 'undefined' && API.deleteComplaintOpinion) await API.deleteComplaintOpinion(cid);
+      item.my_opinion = null;
+      item.me_too_count = Math.max(0, (item.me_too_count || 1) - 1);
+    } else {
+      if (typeof API !== 'undefined' && API.addComplaintOpinion) {
+        const res = await API.addComplaintOpinion(cid, defaultOpinion);
+        if (item) {
+          item.my_opinion = defaultOpinion;
+          item.me_too_count = res.me_too_count || ((item.me_too_count || 0) + 1);
+        }
+      }
+    }
+    const demoMatch = COMPLAINTS.find(c => String(c.id) === String(cid));
+    if (demoMatch) {
+      demoMatch.me2 = !demoMatch.me2;
+      demoMatch.mt = (demoMatch.mt || 0) + (demoMatch.me2 ? 1 : -1);
+      saveComplaints();
+    }
+    showToast('Opinion updated ✓');
+  } catch (e) {
+    showToast('Updated opinion');
+  }
+  if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+}
+
+async function submitCustomComplaintOpinion(cid) {
+  const inp = document.getElementById('cmp-op-inp-' + cid);
+  if (!inp) return;
+  const txt = inp.value.trim();
+  if (!txt) { showToast('Please enter an opinion'); return; }
+  try {
+    if (typeof API !== 'undefined' && API.addComplaintOpinion) {
+      const res = await API.addComplaintOpinion(cid, txt);
+      const item = (communityComplaints || []).find(c => String(c.id) === String(cid));
+      if (item) {
+        item.my_opinion = txt;
+        item.me_too_count = res.me_too_count || ((item.me_too_count || 0) + 1);
+        if (!item.opinions) item.opinions = [];
+        item.opinions.unshift({ user_name: 'You', opinion: txt, created_at: new Date().toISOString() });
+      }
+    }
+    inp.value = '';
+    showToast('Opinion posted ✓');
+  } catch (e) {
+    showToast('Posted opinion');
+  }
+  if (document.getElementById('pg-complaints')) document.getElementById('pg-complaints').innerHTML = renderComplaints();
+}
+
 function renderComplaints() {
+  if (!communityComplaints.length && !communityLoading && typeof API !== 'undefined' && API.getCommunityComplaints) {
+    loadCommunityComplaints();
+  }
   const message = complaintMessage; complaintMessage = '';
   const isHostelStudent = Boolean(myHostelRecord());
   if (!isHostelStudent && HOSTEL_ONLY_CATS.includes(complaintDraft.cat)) {
@@ -5261,7 +5389,21 @@ function renderComplaints() {
     closedOthers.map(c => `<div class="item"><div class="top"><b>${escapeHtml(c.t)}</b><span class="badge">${c.cat} · ${c.loc}</span></div><p>${c.id}</p>${closedNote(c)}</div>`).join('') + `</div>`
     : '';
 
-  return `<h2>Complaints</h2><p class="sub">Hostel, college and mess issues. Only you and the officer handling it can see yours.</p>` +
+  // Determine list of community complaints to show (live backend list preferred, fallback to local nearby)
+  const communityList = communityComplaints.length ? communityComplaints : nearby.map(q => ({
+    id: q[0].id,
+    title: q[0].t,
+    description: q[0].t,
+    category: q[0].cat,
+    location: q[0].loc,
+    status: STAGES[q[0].st],
+    name: 'Student (' + q[0].cat + ')',
+    me_too_count: q[0].mt || 0,
+    my_opinion: q[0].me2 ? 'Me Too' : null,
+    opinions: []
+  }));
+
+  return `<h2>Complaints &amp; Grievances</h2><p class="sub">Hostel, college and mess issues · Review fellow students' complaints, express opinions &amp; say "Me Too"</p>` +
     (message ? `<div class="item" style="margin-bottom:14px;border-color:#15803d">${message}</div>` : '') +
     (!isHostelStudent
       ? `<div class="note" style="margin-bottom:14px;background:rgba(234,179,8,0.12);border-color:#ca8a04;color:#a16207"><b>ℹ️ Day Scholar Notice:</b> You are registered as a Day Scholar. Complaints regarding <b>Hostel, Food &amp; Mess, and Cleanliness</b> are exclusively reserved for students residing in the hostel. You can file complaints under <b>College</b>.</div>`
@@ -5275,6 +5417,19 @@ function renderComplaints() {
     }).join('')}</select></div>` +
     `<div><label for="cfloc">Location</label><select id="cfloc">${COMPLAINT_LOCATIONS.map(c => `<option ${c === complaintDraft.loc ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` +
     `</div>` +
+    `<div class="form-preset-wrap">` +
+    `<span class="preset-label">💡 Common Complaint Topics (tap to fill):</span>` +
+    `<div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Water supply disrupted and tap leaking in washroom:Hostel">🚿 Washroom Tap Leak</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Ceiling fan regulator broken and fan not rotating in room:Hostel">💨 Broken Fan</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Hostel Wi-Fi router no internet / high latency in wing:Hostel">📶 Wi-Fi Issue</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Dinner food served cold and unhygienic with slow refill:Food &amp; Mess">🍲 Food Served Cold</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Drinking water RO purifier empty and not dispensing clean water:Food &amp; Mess">🚰 RO Purifier</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Washrooms and washbasins require urgent deep cleaning:Cleanliness">🧹 Washrooms Uncleaned</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Corridor garbage bins overflowing with trash:Cleanliness">🗑️ Dustbins Full</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Classroom projector and AC unit not working during lectures:College">📽️ Projector / AC</button>` +
+    `<button type="button" class="preset-chip" data-preset="cftxt:Library shortage of current semester syllabus textbooks:College">📚 Textbook Shortage</button>` +
+    `</div></div>` +
     `<label for="cftxt">Describe the problem</label>` +
     `<textarea id="cftxt" placeholder="What is wrong, and since when?">${escapeHtml(complaintDraft.txt)}</textarea>` +
     `<label for="cphoto">Photo evidence (optional)</label>` +
@@ -5286,20 +5441,43 @@ function renderComplaints() {
     `</div>` +
     // --- My complaints ---
     `<h3 style="margin:20px 0 8px">My complaints</h3><div class="list">${mine.length ? mine.map(complaintCard).join('') : '<p class="sub">No complaints yet.</p>'}</div>` +
-    // --- Open issues from others ---
+    // --- Closed by Admin ---
     closedSection +
-    `<h3 style="margin:20px 0 4px">Open issues near you</h3>` +
-    `<p class="sub" style="margin:0 0 10px">Same problem? Tap Me too instead of filing a duplicate.</p><div class="list">` +
-    nearby.map(q => {
-      const c = q[0];
-      return `<div class="item"><div class="top"><b>${escapeHtml(c.t)}</b><span class="badge">${c.cat} · ${c.loc}</span></div>` +
-        `<p>${c.mt} student${c.mt === 1 ? '' : 's'} affected · ${STAGES[c.st]}</p>` +
-        (isRecurring(c) ? '<span class="badge bad" style="display:inline-block;margin-top:6px">Recurring issue</span>' : '') +
-        `<div>${c.me2
-          ? '<button class="btn ghost sm" style="margin-top:10px" disabled type="button">You said me too ✓</button>'
-          : `<button class="btn ghost sm" style="margin-top:10px" data-metoo="${q[1]}" type="button">Me too</button>`}</div></div>`;
-    }).join('') +
-    `</div><p class="demo">Photos are compressed on your device before upload. Demo data. The anonymous complaint box is in the ⋮ menu.</p>`;
+    // --- Campus Community Complaints & Opinions ---
+    `<h3 style="margin:24px 0 4px">Campus Community Grievances &amp; Opinions</h3>` +
+    `<p class="sub" style="margin:0 0 12px">See what fellow students are complaining about across campus · Tap "Me Too" or share your opinion.</p><div class="list">` +
+    (communityList.length ? communityList.map(c => {
+      const cid = c.id;
+      const isMineItem = isMine(c) || (c.login_id && c.login_id === userName());
+      return `<div class="community-cmp-card" id="cmp-card-${cid}">` +
+        `<div class="top"><b>${escapeHtml(c.title || c.t || 'Campus Grievance')}</b><span class="badge">${escapeHtml(c.category || c.cat || 'General')} · ${escapeHtml(c.location || c.loc || 'Campus')}</span></div>` +
+        `<p style="margin:6px 0;font-size:13.5px;color:var(--text)">${escapeHtml(c.description || c.t || '')}</p>` +
+        `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap">` +
+        `<span>👤 Filed by: <b>${escapeHtml(c.name || 'Anonymous Student')}</b></span>` +
+        `<span>·</span>` +
+        `<span>Status: <b style="color:var(--accent)">${escapeHtml(c.status || 'Open')}</b></span>` +
+        (isMineItem ? `<span class="badge ok" style="font-size:10.5px">Your Complaint</span>` : '') +
+        `</div>` +
+        `<div class="me-too-action-bar">` +
+        `<div class="me-too-count-tag"><span>👥</span> <b>${c.me_too_count || c.mt || 0}</b> student${(c.me_too_count || c.mt || 0) === 1 ? '' : 's'} said Me Too</div>` +
+        `<div><button class="me-too-btn ${c.my_opinion ? 'active' : ''}" data-cmp-metoo="${cid}" type="button">${c.my_opinion ? '✓ You said Me Too' : '👍 Me Too'}</button></div>` +
+        `</div>` +
+        `<div class="opinions-drawer">` +
+        `<div style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Student Opinions:</div>` +
+        ((c.opinions && c.opinions.length)
+          ? c.opinions.map(op => `<div class="opinion-bubble-item"><b>${escapeHtml(op.user_name || 'Student')}:</b> “${escapeHtml(op.opinion)}”</div>`).join('')
+          : `<p class="sub" style="margin:0 0 6px;font-size:11.5px">No opinions shared yet. Be the first to add your voice!</p>`) +
+        `<div class="preset-chips" style="margin:6px 0">` +
+        `<button type="button" class="preset-chip sm" data-cmp-quick="${cid}:Facing this exact problem in my room / wing!">Same in my wing!</button>` +
+        `<button type="button" class="preset-chip sm" data-cmp-quick="${cid}:This issue has been persisting for several days">Persisting for days</button>` +
+        `<button type="button" class="preset-chip sm" data-cmp-quick="${cid}:Urgent repair needed before exams">Urgent repair needed</button>` +
+        `</div>` +
+        `<div style="display:flex;gap:6px;margin-top:6px">` +
+        `<input id="cmp-op-inp-${cid}" class="rec-reply-input" style="font-size:12px" placeholder="Add your opinion or experience…">` +
+        `<button class="btn sm" data-cmp-post="${cid}" type="button" style="padding:4px 12px;font-size:12px;white-space:nowrap">Share Opinion</button>` +
+        `</div></div></div>`;
+    }).join('') : '<p class="sub">No open campus grievances reported currently.</p>') +
+    `</div><p class="demo">Evidence photos are compressed on device. Submitter identities strictly protected when filed anonymously.</p>`;
 }
 
 // File a complaint. force = true skips the duplicate check ("File anyway").
@@ -5330,6 +5508,8 @@ function fileComplaint(force) {
       description: txt,
       location: loc,
       is_anonymous: false
+    }).then(() => {
+      loadCommunityComplaints();
     }).catch(() => { });
   }
   complaintDraft = { cat: isHostelStudent ? 'Hostel' : 'College', loc: isHostelStudent ? 'Block A' : 'Library', txt: '' };
@@ -5411,6 +5591,16 @@ function renderMess() {
       `</div>` +
       `<label for="rhq">Hostel Facilities &amp; Maintenance</label>` +
       `<select id="rhq"><option value="5">⭐⭐⭐⭐⭐ Excellent (5/5)</option><option value="4" selected>⭐⭐⭐⭐ Good (4/5)</option><option value="3">⭐⭐⭐ Average (3/5)</option><option value="2">⭐⭐ Poor (2/5)</option><option value="1">⭐ Very Bad (1/5)</option></select>` +
+      `<div class="form-preset-wrap">` +
+      `<span class="preset-label">💡 Common Suggestions (tap to select):</span>` +
+      `<div class="preset-chips">` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Food taste, spices and freshness were well balanced today.">😋 Food Taste Well Balanced</button>` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Dinner was served cold and counter refill took over 20 minutes.">❄️ Dinner Cold / Slow Refill</button>` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Breakfast puri and sabji was hot, hygienic and delicious.">🥞 Breakfast Fresh &amp; Tasty</button>` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Mess dining tables and floor need frequent sanitization between batches.">🧼 Sanitization Needed</button>` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Hostel RO drinking water dispenser needs filter cartridge replacement.">🚰 RO Filter Replacement</button>` +
+      `<button type="button" class="preset-chip" data-preset="rtxt:Please include more variety of green vegetables and fresh salads in daily menu.">🥗 More Green Veggies</button>` +
+      `</div></div>` +
       `<label for="rtxt">Your feedback &amp; suggestions (optional)</label>` +
       `<textarea id="rtxt" placeholder="Share your experience regarding food taste, hygiene or hostel amenities…"></textarea>` +
       `<button class="btn sm" data-srev type="button" style="margin-top:10px">Submit Review to Warden</button>` +
@@ -7372,6 +7562,16 @@ function renderStudentAchievements() {
   return `<h2>Achievements</h2><p class="sub">Post what you have achieved. A teacher verifies it before it shows as verified.</p>` +
     successBox(message) +
     `<div class="ttcard frm"><b style="font-size:18px">Post an achievement</b>` +
+    `<div class="form-preset-wrap">` +
+    `<span class="preset-label">💡 Common Achievement Templates (tap to select):</span>` +
+    `<div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="atl:Won 1st Prize in Inter-College Hackathon:Competition">🏆 1st Prize in Hackathon</button>` +
+    `<button type="button" class="preset-chip" data-preset="atl:Completed NPTEL Certification with Elite + Gold:Certification">📜 NPTEL / Coursera Certificate</button>` +
+    `<button type="button" class="preset-chip" data-preset="atl:Published Research Paper in IEEE Conference:Research">📄 Published Research Paper</button>` +
+    `<button type="button" class="preset-chip" data-preset="atl:Secured Gold Medal in University Sports Tournament:Sports">🥇 Gold Medal in Sports</button>` +
+    `<button type="button" class="preset-chip" data-preset="atl:Contributed to Open Source Project on GitHub:Open Source">💻 Open Source Contribution</button>` +
+    `<button type="button" class="preset-chip" data-preset="atl:Delivered Technical Workshop as Student Speaker:Leadership">🎤 Technical Workshop Speaker</button>` +
+    `</div></div>` +
     `<label for="atl">Title</label><input id="atl" placeholder="e.g. Won inter-college hackathon">` +
     `<div class="two">` +
     `<div><label for="acat">Category</label><select id="acat">${ACHIEVEMENT_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select></div>` +
@@ -11033,7 +11233,10 @@ async function loadRecruiting() {
 const recPending = () => recState ? recState.requests.filter(r => r.status === 'awaiting_student').length : 0;
 function recBanner() {
   const n = recPending();
-  return n ? `<div class="note" style="margin-top:14px">🔔 ${n} recruiter${n === 1 ? ' wants' : 's want'} your contact details. <button class="btn sm" data-go="profile" type="button">Review</button></div>` : '';
+  if (!n) return '';
+  const firstReq = (recState && recState.requests) ? recState.requests.find(r => r.status === 'awaiting_student') : null;
+  const msgSnippet = firstReq && firstReq.message ? ` — “${escapeHtml(firstReq.message)}”` : '';
+  return `<div class="note" style="margin-top:14px;border-color:#3b82f6;background:rgba(59,130,246,0.08);color:var(--text)">💬 <b>Recruiter Message Notification:</b> ${n} recruiter${n === 1 ? ' sent a message &amp; wants' : 's sent messages &amp; want'} to connect with you${msgSnippet}. <button class="btn sm" data-go="profile" type="button" style="margin-left:8px">View &amp; Reply</button></div>`;
 }
 function renderRecruitingCard() {
   if (getRole() !== 'student') return '';
@@ -11042,25 +11245,59 @@ function renderRecruitingCard() {
   const d = recDraft || { visible: p.visible, cgpa: p.cgpa, backlogs: String(p.backlogs), subjects: p.subjects.join(', '), skills: p.skills.join(', ') };
   const msg = recMsg, err = recErr; recMsg = ''; recErr = '';
   const field = (k, label, ph, type) => `<label for="rcd-${k}">${label}</label><input id="rcd-${k}" data-rcd="${k}" ${type ? `type="${type}"` : ''} placeholder="${ph}" value="${e(d[k])}">`;
-  return `<div class="ttcard frm acct"><h3>🕶️ Recruiter visibility</h3>` +
+  return `<div class="ttcard frm acct"><h3>🕶️ Recruiter visibility &amp; Messages</h3>` +
     `<p class="sub">Recruiters can see an <b>anonymous</b> profile: an ID, branch, year, CGPA, skills and verified achievements. Your name, photo, phone, e-mail and address are never shown. ` +
     `Your contact details are shared only if the placement officer approves a request <b>and</b> you agree.</p>` +
     `<label class="rc-switch"><input type="checkbox" id="rcd-visible" data-rcd="visible" ${d.visible ? 'checked' : ''}> Show my anonymous profile to recruiters</label>` +
     (p.code ? `<p style="margin:8px 0 0">Your anonymous ID: <b>${e(p.code)}</b></p>` : '') +
     field('cgpa', 'CGPA', 'e.g. 8.2', 'number').replace('<input', '<input min="0" max="10" step="0.01"') +
     field('backlogs', 'Active backlogs', '0', 'number').replace('<input', '<input min="0" max="50"') +
+    `<div class="form-preset-wrap"><span class="preset-label">💡 Common Strong Subjects (tap to add):</span><div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Data Structures &amp; Algorithms:append">Data Structures</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:DBMS:append">DBMS</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Operating Systems:append">Operating Systems</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Computer Networks:append">Computer Networks</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Software Engineering:append">Software Eng.</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Web Development:append">Web Dev</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Machine Learning:append">Machine Learning</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-subjects:Cloud Computing:append">Cloud Computing</button>` +
+    `</div></div>` +
     field('subjects', 'Strong subjects (comma separated)', 'e.g. Data Structures, DBMS') +
+    `<div class="form-preset-wrap"><span class="preset-label">💡 Popular In-Demand Skills (tap to add):</span><div class="preset-chips">` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:Python:append">Python</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:Java:append">Java</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:JavaScript:append">JavaScript</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:React:append">React</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:Node.js:append">Node.js</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:SQL:append">SQL</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:Git &amp; GitHub:append">Git &amp; GitHub</button>` +
+    `<button type="button" class="preset-chip" data-preset="rcd-skills:Docker:append">Docker</button>` +
+    `</div></div>` +
     field('skills', 'Skills (comma separated)', 'e.g. Python, SQL, React') +
     `<p class="sub" style="margin:6px 0 0">Do not put your name or contact details here. They are removed automatically. CGPA is self-reported.</p>` +
     (err ? `<div class="err" role="alert">${e(err)}</div>` : '') + (msg ? `<div class="okmsg">${e(msg)}</div>` : '') +
     `<button class="btn sm" data-rec="save" type="button" style="margin-top:8px">Save</button>` +
-    (recState.requests.length ? `<h3 style="margin-top:18px">Contact requests</h3><div class="list">` + recState.requests.map(r => {
+    (recState.requests.length ? `<h3 style="margin:20px 0 8px">💬 Recruiter Messages &amp; Contact Requests</h3><div class="list">` + recState.requests.map(r => {
       const st = RC_STATUS[r.status];
       return `<div class="item"><div class="top"><b>${e(r.company)}</b><span class="badge ${st[2]}">${st[0]}</span></div>` +
-        (r.message ? `<p class="sub">“${e(r.message)}”</p>` : '') + `<p class="sub">Approved by the placement office · ${fmtDay(r.at)}</p>` +
+        `<p class="sub">Approved by the placement office · ${fmtDay(r.at)}</p>` +
+        `<div class="recruiter-msg-box">` +
+        `<div style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;color:#2563eb"><span>💬 Message from Recruiter (${e(r.company)}):</span></div>` +
+        `<div class="rec-msg-bubble">“${e(r.message || 'We reviewed your candidate profile and would like to connect regarding placement.')}”</div>` +
         (r.status === 'awaiting_student'
-          ? `<div class="btns" style="margin-top:8px"><button class="btn sm" data-rec="acc:${r.id}" type="button">Share my contact details</button><button class="btn ghost sm" data-rec="dec:${r.id}" type="button">No thanks</button></div>`
-          : `<p class="rc-status ${st[2]}">${r.status === 'approved' ? '✅ You agreed to share your contact details' : '✖ You declined'}</p>`) + `</div>`;
+          ? `<div class="rec-reply-row">` +
+            `<label style="font-size:12px;font-weight:600">Your reply message / availability note (optional):</label>` +
+            `<input id="rec-reply-${r.id}" class="rec-reply-input" placeholder="e.g. Available for technical interview this week, reach me at...">` +
+            `<div class="preset-chips" style="margin-top:4px">` +
+            `<button type="button" class="preset-chip sm" data-preset="rec-reply-${r.id}:Available for technical interview this week:">📅 Available this week</button>` +
+            `<button type="button" class="preset-chip sm" data-preset="rec-reply-${r.id}:Interested in software engineering roles:">💻 Interested in SWE role</button>` +
+            `<button type="button" class="preset-chip sm" data-preset="rec-reply-${r.id}:Please reach me on my registered student email:">📧 Reach via email</button>` +
+            `</div>` +
+            `<div class="btns" style="margin-top:12px"><button class="btn sm" data-rec="acc:${r.id}" type="button">Share my contact details</button><button class="btn ghost sm" data-rec="dec:${r.id}" type="button">No thanks</button></div>` +
+            `</div>`
+          : `<p class="rc-status ${st[2]}">${r.status === 'approved' ? '✅ You agreed to share your contact details' : '✖ You declined'}</p>` +
+            (r.student_note ? `<p class="sub" style="margin-top:6px;color:var(--text)">💬 <b>Your response note:</b> “${e(r.student_note)}”</p>` : '')) +
+        `</div></div>`;
     }).join('') + `</div>` : '') + `</div>`;
 }
 async function recAction(btn) {
@@ -11072,7 +11309,9 @@ async function recAction(btn) {
     } catch (e) { recErr = e.message; render(); return; }
     recDraft = null; recMsg = 'Saved ✓'; recStale = true; render();
   } else if (act === 'acc' || act === 'dec') {
-    try { await API.request('/api/me/recruiting/requests/' + id + '/decide', { method: 'POST', body: JSON.stringify({ accept: act === 'acc' }) }); }
+    const replyInput = document.getElementById('rec-reply-' + id);
+    const replyMsg = replyInput ? replyInput.value.trim() : '';
+    try { await API.request('/api/me/recruiting/requests/' + id + '/decide', { method: 'POST', body: JSON.stringify({ accept: act === 'acc', message: replyMsg }) }); }
     catch (e) { recErr = e.message; }
     recStale = true; render();
   }
@@ -11324,7 +11563,7 @@ document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn';
+const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn,[data-preset],[data-cmp-metoo],[data-cmp-quick],[data-cmp-post]';
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -11504,9 +11743,19 @@ document.addEventListener('click', e => {
   }
   else if (t.id === 'achsub') submitAchievement();
 
-  // ----- Complaints -----
+  // ----- Complaints & Presets -----
   else if (t.dataset.adv) advanceComplaint(+t.dataset.adv);
   else if (t.dataset.metoo) meToo(+t.dataset.metoo);
+  else if (t.dataset.cmpMetoo) toggleComplaintOpinion(+t.dataset.cmpMetoo);
+  else if (t.dataset.cmpQuick) {
+    const parts = t.dataset.cmpQuick.split(':');
+    toggleComplaintOpinion(+parts[0], parts.slice(1).join(':'));
+  }
+  else if (t.dataset.cmpPost) submitCustomComplaintOpinion(+t.dataset.cmpPost);
+  else if (t.dataset.preset) {
+    const parts = t.dataset.preset.split(':');
+    applyPreset(parts[0], parts[1], parts[2] || '');
+  }
   else if (t.hasAttribute('data-force')) fileComplaint(true);
   else if (t.id === 'cfsub') fileComplaint(false);
 
@@ -11723,6 +11972,18 @@ function buildNotifications() {
     leaveRequests.staff.filter(r => r.id && isMyLeave(r) && r.s !== 'Pending').forEach(r => out.push(decided(r)));
   } else {
     leaveRequests.student.filter(r => r.id && r.s !== 'Pending').forEach(r => out.push(decided(r)));
+    if (recState && Array.isArray(recState.requests)) {
+      recState.requests.filter(r => r.status === 'awaiting_student').forEach(r => {
+        out.push({
+          id: 'rec:' + r.id,
+          icon: '💬',
+          title: 'Recruiter Message: ' + r.company,
+          text: (r.message ? `“${r.message}” · ` : '') + 'Sent you a contact request & message',
+          go: 'profile',
+          isNew: true
+        });
+      });
+    }
   }
 
   const unseenClosed = new Set(unseenClosures().map(closeKey));

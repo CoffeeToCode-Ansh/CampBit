@@ -357,12 +357,14 @@ def merge_notices(old, new, user):
     if user["role"] in ("principal", "admin") or not isinstance(new, list):
         return new
     seen_old = {json.dumps(n, sort_keys=True) for n in (old or [])}
-    seen_new = {json.dumps(n, sort_keys=True) for n in new}
-    added = [n for n in new if json.dumps(n, sort_keys=True) not in seen_old]
-    removed = [n for n in (old or []) if json.dumps(n, sort_keys=True) not in seen_new]
-    if any(not notice_postable(n, user) for n in added + removed):
-        raise HTTPException(403, "You can only post or change notices for your own department / hostel")
-    return new
+    for n in new:
+        if json.dumps(n, sort_keys=True) not in seen_old:
+            if not notice_postable(n, user):
+                raise HTTPException(403, "You can only post or change notices for your own department / hostel")
+    keep = [n for n in (old or []) if not notice_postable(n, user)]
+    mine = [n for n in new if notice_postable(n, user)]
+    return mine + keep
+
 
 
 def viewer_scope(user, raw: dict):
@@ -1183,7 +1185,7 @@ async def upload_resource(
     )
     new_rid = cur.lastrowid
     log_audit(db, "RESOURCE_UPLOAD", "resource", new_rid, {"title": title, "size": len(data), "dept": dept}, user=user, ip_address=get_client_ip(request))
-    return {"ok": True}
+    return {"ok": True, "id": new_rid}
 
 
 def get_visible_resource(db, rid: int, user):
@@ -1576,10 +1578,10 @@ def my_recruiting(user=Depends(require_roles("student")), db: sqlite3.Connection
     p = db.execute("SELECT * FROM student_profiles WHERE user_id = ?", (user["id"],)).fetchone()
     prof = profile_json(p) if p else {"visible": False, "cgpa": "", "backlogs": 0, "subjects": [], "skills": [], "code": ""}
     rows = db.execute(
-        "SELECT id, company, message, status, created_at FROM contact_requests WHERE student_id = ? AND college_id = ? "
+        "SELECT id, company, message, status, student_note, created_at FROM contact_requests WHERE student_id = ? AND college_id = ? "
         "AND status IN ('awaiting_student','approved','declined_student') ORDER BY id DESC", (user["id"], cid)).fetchall()
     return {"profile": prof, "requests": [{"id": r["id"], "company": r["company"], "message": r["message"],
-                                           "status": r["status"], "at": r["created_at"]} for r in rows]}
+                                           "status": r["status"], "student_note": r["student_note"] or "", "at": r["created_at"]} for r in rows]}
 
 
 @app.put("/api/me/recruiting")
@@ -1616,6 +1618,7 @@ def save_my_recruiting(body: RecruitingIn, user=Depends(require_roles("student")
 
 class DecideIn(BaseModel):
     accept: bool = False
+    message: str = ""
 
 
 @app.post("/api/me/recruiting/requests/{rid}/decide")
@@ -1626,9 +1629,10 @@ def student_decide(rid: int, body: DecideIn, request: Request, user=Depends(requ
         raise HTTPException(404, "This request is no longer waiting for your answer")
     new_status = "approved" if body.accept else "declined_student"
     now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
-    db.execute("UPDATE contact_requests SET status = ?, student_at = ? WHERE id = ? AND college_id = ?",
-               (new_status, now_iso, rid, cid))
-    log_audit(db, "STUDENT_CONSENT_DECIDE", "contact_request", rid, {"decision": new_status, "company": r["company"]}, user=user, ip_address=get_client_ip(request))
+    student_msg = (body.message or "").strip()[:300]
+    db.execute("UPDATE contact_requests SET status = ?, student_at = ?, student_note = ? WHERE id = ? AND college_id = ?",
+               (new_status, now_iso, student_msg, rid, cid))
+    log_audit(db, "STUDENT_CONSENT_DECIDE", "contact_request", rid, {"decision": new_status, "company": r["company"], "student_note": student_msg}, user=user, ip_address=get_client_ip(request))
     return {"ok": True}
 
 
@@ -2502,6 +2506,88 @@ def create_complaint(body: ComplaintIn, request: Request, user=Depends(current_u
     row = db.execute("SELECT * FROM complaints WHERE id = ? AND college_id = ?", (new_id, college_id)).fetchone()
     log_audit(db, "COMPLAINT_CREATE", "complaint", new_id, {"title": body.title, "category": body.category}, user=user, ip_address=get_client_ip(request))
     return {"ok": True, "complaint": dict(row)}
+
+
+class OpinionIn(BaseModel):
+    opinion: str = "Me Too"
+
+
+@app.get("/api/complaints/community")
+def get_community_complaints(user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
+    """Returns campus complaints within user's college so students can view, share opinions, and click Me Too."""
+    if user["role"] == "guest":
+        raise HTTPException(403, "Access denied: Guests cannot view internal complaints")
+    college_id = user.get("college_id", "BPUT")
+    rows = db.execute("SELECT * FROM complaints WHERE college_id = ? ORDER BY id DESC LIMIT 50", (college_id,)).fetchall()
+
+    opinions_by_cid = {}
+    my_opinion_by_cid = {}
+    cids = [r["id"] for r in rows]
+    if cids:
+        placeholders = ",".join("?" * len(cids))
+        op_rows = db.execute(
+            f"SELECT complaint_id, user_id, user_name, opinion, created_at FROM complaint_opinions WHERE college_id = ? AND complaint_id IN ({placeholders}) ORDER BY id DESC",
+            [college_id] + cids
+        ).fetchall()
+        for op in op_rows:
+            cid = op["complaint_id"]
+            if cid not in opinions_by_cid:
+                opinions_by_cid[cid] = []
+            opinions_by_cid[cid].append({
+                "user_name": op["user_name"] if not op["user_name"].startswith("CS") else "Student",
+                "opinion": op["opinion"],
+                "created_at": op["created_at"]
+            })
+            if op["user_id"] == user["id"]:
+                my_opinion_by_cid[cid] = op["opinion"]
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        cid = d["id"]
+        # Mask submitter identity if anonymous or viewed by another student
+        if d.get("is_anonymous") or (user["role"] == "student" and d["user_id"] != user["id"]):
+            d["login_id"] = ""
+            d["user_id"] = None
+            d["name"] = "Anonymous Student" if d.get("is_anonymous") else f"Student ({d.get('category', 'Campus')})"
+        ops = opinions_by_cid.get(cid, [])
+        d["me_too_count"] = len(ops)
+        d["my_opinion"] = my_opinion_by_cid.get(cid, None)
+        d["opinions"] = ops[:5]
+        out.append(d)
+    return out
+
+
+@app.post("/api/complaints/{cid}/opinion")
+def add_complaint_opinion(cid: int, body: OpinionIn, request: Request, user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
+    if user["role"] == "guest":
+        raise HTTPException(403, "Access denied")
+    college_id = user.get("college_id", "BPUT")
+    row = db.execute("SELECT id, title, college_id FROM complaints WHERE id = ? AND college_id = ?", (cid, college_id)).fetchone()
+    if not row:
+        raise HTTPException(404, "Complaint not found")
+    opinion_text = (body.opinion or "Me Too").strip()[:200]
+    now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    db.execute(
+        """
+        INSERT INTO complaint_opinions (college_id, complaint_id, user_id, login_id, user_name, opinion, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(complaint_id, user_id) DO UPDATE SET opinion=excluded.opinion, created_at=excluded.created_at
+        """,
+        (college_id, cid, user["id"], user["login_id"], user["name"], opinion_text, now_iso)
+    )
+    count = db.execute("SELECT COUNT(*) FROM complaint_opinions WHERE college_id = ? AND complaint_id = ?", (college_id, cid)).fetchone()[0]
+    log_audit(db, "COMPLAINT_OPINION", "complaint", cid, {"opinion": opinion_text}, user=user, ip_address=get_client_ip(request))
+    return {"ok": True, "me_too_count": count, "opinion": opinion_text}
+
+
+@app.delete("/api/complaints/{cid}/opinion")
+def delete_complaint_opinion(cid: int, request: Request, user=Depends(current_user), db: sqlite3.Connection = Depends(get_db)):
+    college_id = user.get("college_id", "BPUT")
+    db.execute("DELETE FROM complaint_opinions WHERE college_id = ? AND complaint_id = ? AND user_id = ?", (college_id, cid, user["id"]))
+    count = db.execute("SELECT COUNT(*) FROM complaint_opinions WHERE college_id = ? AND complaint_id = ?", (college_id, cid)).fetchone()[0]
+    log_audit(db, "COMPLAINT_OPINION_REMOVE", "complaint", cid, {}, user=user, ip_address=get_client_ip(request))
+    return {"ok": True, "me_too_count": count}
 
 
 @app.get("/api/complaints/{cid}")

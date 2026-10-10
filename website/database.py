@@ -332,7 +332,8 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT
+    student_at TEXT,
+    student_note TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -412,6 +413,18 @@ CREATE TABLE IF NOT EXISTS complaints (
     action_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS complaint_opinions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    college_id TEXT NOT NULL DEFAULT 'BPUT',
+    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    login_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    opinion TEXT NOT NULL DEFAULT 'Me Too',
+    created_at TEXT NOT NULL,
+    UNIQUE(complaint_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -534,6 +547,8 @@ CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_tenant_user ON complaints(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_tenant_status ON complaints(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_complaints_tenant_cat ON complaints(college_id, category);
+CREATE INDEX IF NOT EXISTS idx_complaint_opinions_comp ON complaint_opinions(college_id, complaint_id);
+CREATE INDEX IF NOT EXISTS idx_complaint_opinions_user ON complaint_opinions(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
@@ -627,7 +642,8 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT
+    student_at TEXT,
+    student_note TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -707,6 +723,18 @@ CREATE TABLE IF NOT EXISTS complaints (
     action_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS complaint_opinions (
+    id SERIAL PRIMARY KEY,
+    college_id VARCHAR(50) NOT NULL DEFAULT 'BPUT',
+    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    login_id VARCHAR(100) NOT NULL,
+    user_name VARCHAR(150) NOT NULL,
+    opinion TEXT NOT NULL DEFAULT 'Me Too',
+    created_at TIMESTAMPTZ NOT NULL,
+    UNIQUE(complaint_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -829,6 +857,8 @@ CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
 CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_user ON complaints(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_status ON complaints(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_cat ON complaints(college_id, category);
+CREATE INDEX IF NOT EXISTS idx_pg_complaint_opinions_comp ON complaint_opinions(college_id, complaint_id);
+CREATE INDEX IF NOT EXISTS idx_pg_complaint_opinions_user ON complaint_opinions(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
@@ -865,13 +895,17 @@ def init_db(password_hasher_fn=None):
             conn.commit()
 
             # Postgres migration loop for college_id
-            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
+            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "complaint_opinions", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
                 try:
                     conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS college_id TEXT NOT NULL DEFAULT 'BPUT'")
                 except Exception:
                     pass
             try:
                 conn.execute("ALTER TABLE leaves ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT 'Pending'")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS student_note TEXT DEFAULT ''")
             except Exception:
                 pass
             conn.commit()
@@ -919,7 +953,7 @@ def init_db(password_hasher_fn=None):
             conn.executescript(SQLITE_TABLES_DDL)
 
             # SQLite migration checks for legacy app.db columns
-            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
+            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "complaint_opinions", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
                 try:
                     cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
                     if cols and "college_id" not in cols:
@@ -931,6 +965,13 @@ def init_db(password_hasher_fn=None):
                 lcols = [r[1] for r in conn.execute("PRAGMA table_info(leaves)").fetchall()]
                 if lcols and "stage" not in lcols:
                     conn.execute("ALTER TABLE leaves ADD COLUMN stage TEXT NOT NULL DEFAULT 'Pending'")
+            except Exception:
+                pass
+
+            try:
+                crcols = [r[1] for r in conn.execute("PRAGMA table_info(contact_requests)").fetchall()]
+                if crcols and "student_note" not in crcols:
+                    conn.execute("ALTER TABLE contact_requests ADD COLUMN student_note TEXT DEFAULT ''")
             except Exception:
                 pass
 
