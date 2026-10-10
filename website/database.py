@@ -870,6 +870,17 @@ def init_db(password_hasher_fn=None):
             conn.execute("RESET lock_timeout")
             conn.execute("RESET statement_timeout")
             conn.commit()
+            # Older databases may have a narrower role CHECK (e.g. no 'guest'/'hod'); rebuild it
+            try:
+                conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check")
+                conn.execute(
+                    "ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN "
+                    "('student','faculty','hod','principal','warden','placement_officer','admin','guest'))"
+                )
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print(f"[init_db] role check rebuild skipped: {e}", flush=True)
             # Re-sync ID counters so INSERTs never collide with existing rows
             for tbl in ("users", "audit_logs", "leaves", "complaints", "achievements",
                         "attendance_sessions", "attendance", "requests", "contact_requests",
