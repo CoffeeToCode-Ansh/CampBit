@@ -16,25 +16,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-BASE = Path(__file__).resolve().parent
+from dotenv import load_dotenv
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv(BASE / ".env")
-except ImportError:
-    _env_file = BASE / ".env"
-    if _env_file.is_file():
-        try:
-            with open(_env_file, "r", encoding="utf-8") as _f:
-                for _line in _f:
-                    _line = _line.strip()
-                    if _line and not _line.startswith("#") and "=" in _line:
-                        _k, _v = _line.split("=", 1)
-                        _k, _v = _k.strip(), _v.strip().strip("\"'")
-                        if _k and _k not in os.environ:
-                            os.environ[_k] = _v
-        except Exception:
-            pass
+BASE = Path(__file__).resolve().parent
+load_dotenv(BASE / ".env")
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB_PATH = Path(os.environ.get("DATABASE_PATH", str(BASE / "app.db")))
@@ -68,7 +53,7 @@ def get_pg_pool():
                 separator = "&" if "?" in dsn else "?"
                 dsn = f"{dsn}{separator}sslmode=require"
 
-        _pg_pool = ThreadedConnectionPool(minconn=1, maxconn=20, dsn=dsn)
+        _pg_pool = ThreadedConnectionPool(minconn=1, maxconn=20, dsn=dsn, connect_timeout=15)
     return _pg_pool
 
 
@@ -165,6 +150,10 @@ class PostgresCursorWrapper:
         self._cur.executemany(translated_sql, seq_of_params)
         return self
 
+    def __iter__(self):
+        # sqlite3 cursors are iterable (for row in db.execute(...)); psycopg2 wrapper must be too
+        return iter(self._cur)
+
     def fetchone(self):
         return self._cur.fetchone()
 
@@ -232,9 +221,6 @@ def get_sqlite_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA busy_timeout = 5000;")
-    conn.execute("PRAGMA cache_size = -64000;")       # 64MB memory page cache
-    conn.execute("PRAGMA temp_store = MEMORY;")        # In-memory temporary tables & query sorts
-    conn.execute("PRAGMA mmap_size = 268435456;")      # 256MB memory-mapped I/O for ultrafast reads
     return conn
 
 
@@ -332,8 +318,7 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT,
-    student_note TEXT DEFAULT ''
+    student_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -413,18 +398,6 @@ CREATE TABLE IF NOT EXISTS complaints (
     action_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS complaint_opinions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    college_id TEXT NOT NULL DEFAULT 'BPUT',
-    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    login_id TEXT NOT NULL,
-    user_name TEXT NOT NULL,
-    opinion TEXT NOT NULL DEFAULT 'Me Too',
-    created_at TEXT NOT NULL,
-    UNIQUE(complaint_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -533,31 +506,19 @@ CREATE INDEX IF NOT EXISTS idx_users_login_id ON users(login_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_college_id ON users(college_id);
-CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users(college_id, role);
-CREATE INDEX IF NOT EXISTS idx_users_tenant_login ON users(college_id, login_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_user_id ON leaves(user_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_leaves_college_id ON leaves(college_id);
-CREATE INDEX IF NOT EXISTS idx_leaves_tenant_user ON leaves(college_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_leaves_tenant_status ON leaves(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_college_id ON achievements(college_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
-CREATE INDEX IF NOT EXISTS idx_complaints_tenant_user ON complaints(college_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_complaints_tenant_status ON complaints(college_id, status);
-CREATE INDEX IF NOT EXISTS idx_complaints_tenant_cat ON complaints(college_id, category);
-CREATE INDEX IF NOT EXISTS idx_complaint_opinions_comp ON complaint_opinions(college_id, complaint_id);
-CREATE INDEX IF NOT EXISTS idx_complaint_opinions_user ON complaint_opinions(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_session_student ON attendance(session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_college_id ON audit_logs(college_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_created ON audit_logs(college_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_resources_tenant_dept ON resources(college_id, dept);
 CREATE INDEX IF NOT EXISTS idx_certificates_college_id ON certificates(college_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_cert_id ON certificates(cert_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_student_roll ON certificates(student_roll);
@@ -642,8 +603,7 @@ CREATE TABLE IF NOT EXISTS contact_requests (
     officer_id INTEGER,
     officer_note TEXT,
     officer_at TEXT,
-    student_at TEXT,
-    student_note TEXT DEFAULT ''
+    student_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS requests (
@@ -723,18 +683,6 @@ CREATE TABLE IF NOT EXISTS complaints (
     action_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS complaint_opinions (
-    id SERIAL PRIMARY KEY,
-    college_id VARCHAR(50) NOT NULL DEFAULT 'BPUT',
-    complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    login_id VARCHAR(100) NOT NULL,
-    user_name VARCHAR(150) NOT NULL,
-    opinion TEXT NOT NULL DEFAULT 'Me Too',
-    created_at TIMESTAMPTZ NOT NULL,
-    UNIQUE(complaint_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -843,31 +791,19 @@ CREATE INDEX IF NOT EXISTS idx_users_login_id ON users(login_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_college_id ON users(college_id);
-CREATE INDEX IF NOT EXISTS idx_pg_users_tenant_role ON users(college_id, role);
-CREATE INDEX IF NOT EXISTS idx_pg_users_tenant_login ON users(college_id, login_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_user_id ON leaves(user_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_leaves_college_id ON leaves(college_id);
-CREATE INDEX IF NOT EXISTS idx_pg_leaves_tenant_user ON leaves(college_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_pg_leaves_tenant_status ON leaves(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_college_id ON achievements(college_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
-CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_user ON complaints(college_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_status ON complaints(college_id, status);
-CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_cat ON complaints(college_id, category);
-CREATE INDEX IF NOT EXISTS idx_pg_complaint_opinions_comp ON complaint_opinions(college_id, complaint_id);
-CREATE INDEX IF NOT EXISTS idx_pg_complaint_opinions_user ON complaint_opinions(college_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
-CREATE INDEX IF NOT EXISTS idx_pg_attendance_session_student ON attendance(session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_college_id ON audit_logs(college_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
-CREATE INDEX IF NOT EXISTS idx_pg_audit_logs_tenant_created ON audit_logs(college_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_pg_resources_tenant_dept ON resources(college_id, dept);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_college_id ON certificates(college_id);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_cert_id ON certificates(cert_id);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_student_roll ON certificates(student_roll);
@@ -888,6 +824,9 @@ def init_db(password_hasher_fn=None):
     try:
         if IS_POSTGRES:
             # PostgreSQL execution
+            print("[init_db] connected to PostgreSQL, creating tables...", flush=True)
+            conn.execute("SET lock_timeout = '15s'")
+            conn.execute("SET statement_timeout = '60s'")
             for statement in POSTGRES_TABLES_DDL.strip().split(";"):
                 stmt = statement.strip()
                 if stmt:
@@ -895,17 +834,13 @@ def init_db(password_hasher_fn=None):
             conn.commit()
 
             # Postgres migration loop for college_id
-            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "complaint_opinions", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
+            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
                 try:
                     conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS college_id TEXT NOT NULL DEFAULT 'BPUT'")
                 except Exception:
                     pass
             try:
                 conn.execute("ALTER TABLE leaves ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT 'Pending'")
-            except Exception:
-                pass
-            try:
-                conn.execute("ALTER TABLE contact_requests ADD COLUMN IF NOT EXISTS student_note TEXT DEFAULT ''")
             except Exception:
                 pass
             conn.commit()
@@ -925,12 +860,17 @@ def init_db(password_hasher_fn=None):
             conn.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS client_uuid TEXT")
             conn.commit()
         
+            print("[init_db] column migrations done, creating indexes...", flush=True)
             # Postgres indexes execution
             for statement in POSTGRES_INDEXES_DDL.strip().split(";"):
                 stmt = statement.strip()
                 if stmt:
                     conn.execute(stmt)
             conn.commit()
+            conn.execute("RESET lock_timeout")
+            conn.execute("RESET statement_timeout")
+            conn.commit()
+            print("[init_db] PostgreSQL schema ready", flush=True)
 
             # Seed admin if users table is empty
             count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
@@ -953,7 +893,7 @@ def init_db(password_hasher_fn=None):
             conn.executescript(SQLITE_TABLES_DDL)
 
             # SQLite migration checks for legacy app.db columns
-            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "complaint_opinions", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
+            for tbl in ("users", "resources", "requests", "leaves", "achievements", "complaints", "issues", "attendance_sessions", "attendance", "certificates", "timetable_adjustments", "contact_requests", "shortlists"):
                 try:
                     cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
                     if cols and "college_id" not in cols:
@@ -965,13 +905,6 @@ def init_db(password_hasher_fn=None):
                 lcols = [r[1] for r in conn.execute("PRAGMA table_info(leaves)").fetchall()]
                 if lcols and "stage" not in lcols:
                     conn.execute("ALTER TABLE leaves ADD COLUMN stage TEXT NOT NULL DEFAULT 'Pending'")
-            except Exception:
-                pass
-
-            try:
-                crcols = [r[1] for r in conn.execute("PRAGMA table_info(contact_requests)").fetchall()]
-                if crcols and "student_note" not in crcols:
-                    conn.execute("ALTER TABLE contact_requests ADD COLUMN student_note TEXT DEFAULT ''")
             except Exception:
                 pass
 
