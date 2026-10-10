@@ -6699,6 +6699,57 @@ html.no-scroll { overflow: hidden; }
 :root[data-theme="dark"] .audit-badge-att { background: rgba(20, 184, 166, 0.25); color: #2dd4bf; }
 :root[data-theme="dark"] .audit-badge-res { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
 
+/* Audit Log Refreshing Animation */
+.audit-table-wrap.refreshing {
+  position: relative;
+}
+.audit-table-wrap.refreshing table {
+  opacity: 0.35;
+  filter: blur(0.5px);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+  pointer-events: none;
+}
+.audit-refresh-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 14px;
+  z-index: 10;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+:root[data-theme="dark"] .audit-refresh-overlay {
+  background: rgba(15, 23, 42, 0.78);
+  color: #60a5fa;
+}
+.audit-refresh-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(59, 130, 246, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.spin-icon {
+  display: inline-block;
+  animation: spin 0.75s linear infinite;
+}
+.audit-updated-flash {
+  animation: auditFlash 1.2s ease-out;
+}
+@keyframes auditFlash {
+  0% { background-color: rgba(16, 185, 129, 0.2); }
+  100% { background-color: transparent; }
+}
+
 /* =============================================================================
    22. HOD & PRINCIPAL DASHBOARDS (EXECUTIVE CARDS, APPROVALS & MOBILE 340px)
    ============================================================================= */
