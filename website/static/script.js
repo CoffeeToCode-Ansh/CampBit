@@ -5392,8 +5392,11 @@ let studentReviewMsg = '';
 
 let communityComplaints = [];
 let communityLoading = false;
+let communityTried = false;
 async function loadCommunityComplaints() {
   if (communityLoading) return;
+   if (communityTried && !force) return;      // <-- add
+  communityTried = true;
   communityLoading = true;
   try {
     if (typeof API !== 'undefined' && API.getCommunityComplaints) {
