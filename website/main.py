@@ -118,7 +118,7 @@ ADMIN = {"admin"}
 # own hostel, own complaints...) is enforced by filter_read() / merge_write() below.
 RULES = {
     "cc_stud":       {"read": STAFF_ROLES | ADMIN,                          "write": {"hod", "principal", "admin"}},
-    "cc_staff":      {"read": {"hod", "principal", "admin"},                "write": ADMIN},
+    "cc_staff":      {"read": STAFF_ROLES | ADMIN,                          "write": ADMIN},
     "cc_nt":         {"read": ALL,                                          "write": {"hod", "principal", "warden", "placement_officer", "admin"}},
     "cc_hol":        {"read": ALL,                                          "write": {"principal", "admin"}},
     "cc_admin_prof": {"read": ADMIN,                                        "write": ADMIN},
@@ -172,7 +172,11 @@ def in_scope(key: str, rec: dict, user) -> bool:
         if role == "placement_officer":
             return True
     elif key == "cc_staff":
-        return role == "hod" and bool(dept) and norm_dept(rec.get("dept")) == dept
+        if role in ("principal", "admin"):
+            return True
+        if role == "hod":
+            return bool(dept) and norm_dept(rec.get("dept")) == dept
+        return True
     elif key == "cc_cmp":
         if role == "warden":
             return rec.get("cat") in ("Hostel", "Mess", "Food & Mess", "Cleanliness", "Food")
@@ -565,8 +569,10 @@ def login(body: LoginIn, request: Request, db: sqlite3.Connection = Depends(get_
         target_cid = (row["college_id"] if row and "college_id" in row.keys() and row["college_id"] else "BPUT") if row else "BPUT"
         log_audit(db, "AUTH_LOGIN_FAILURE", "user", login_id, {"reason": "invalid_credentials"}, college_id=target_cid, ip_address=client_ip, login_id=login_id)
         raise HTTPException(401, "Incorrect ID or password. Please check and try again.")
-    # the login page only has Student / Staff / Admin buttons; "Staff" accepts every staff role
-    picked_ok = body.role == row["role"] or (body.role == "staff" and row["role"] in STAFF_ROLES)
+    # the login page has Student / Staff / Admin buttons; "Staff" accepts every staff role.
+    # If a staff member (HOD, Principal, Teacher) signs in with the default "Student" option selected,
+    # authenticate and route them directly to their authoritative role portal seamlessly.
+    picked_ok = body.role == row["role"] or (body.role in ("staff", "student") and row["role"] in STAFF_ROLES)
     if not picked_ok:
         shown = "staff" if row["role"] in STAFF_ROLES else row["role"]
         log_audit(db, "AUTH_LOGIN_FAILURE", "user", row["id"], {"reason": "mismatched_portal_role", "expected": body.role, "actual": row["role"]}, college_id=row["college_id"], ip_address=client_ip, login_id=row["login_id"])
@@ -3721,13 +3727,23 @@ def get_admin_analytics(
         """,
         (college_id,)
     ).fetchone()
-    comp_col = load_collection(db, "cc_cmp") or []
-    col_open = sum(1 for c in comp_col if isinstance(c, dict) and c.get("st") in (0, 1))
-    col_res = sum(1 for c in comp_col if isinstance(c, dict) and c.get("st") in (2, 3))
-    total_comp = (comp_totals["total"] or 0) + len(comp_col)
-    open_comp = (comp_totals["open_cnt"] or 0) + (comp_totals["in_prog_cnt"] or 0) + col_open
-    resolved_comp = (comp_totals["resolved_cnt"] or 0) + (comp_totals["closed_cnt"] or 0) + col_res
-    sla_resolution_rate = round(resolved_comp / total_comp * 100, 1) if total_comp > 0 else 100.0
+
+    total_comp = comp_totals["total"] or 0
+    open_comp = comp_totals["open_cnt"] or 0
+    in_prog_comp = comp_totals["in_prog_cnt"] or 0
+    resolved_comp = comp_totals["resolved_cnt"] or 0
+    closed_comp = comp_totals["closed_cnt"] or 0
+
+    if total_comp == 0:
+        comp_col = load_collection(db, "cc_cmp") or []
+        open_comp = sum(1 for c in comp_col if isinstance(c, dict) and c.get("st") == 0)
+        in_prog_comp = sum(1 for c in comp_col if isinstance(c, dict) and c.get("st") in (1, 2))
+        resolved_comp = sum(1 for c in comp_col if isinstance(c, dict) and c.get("st") == 3 and not c.get("closed"))
+        closed_comp = sum(1 for c in comp_col if isinstance(c, dict) and (c.get("closed") or False))
+        total_comp = len(comp_col)
+
+    total_resolved = resolved_comp + closed_comp
+    sla_resolution_rate = round(total_resolved / total_comp * 100, 1) if total_comp > 0 else 100.0
 
     comp_cat_rows = db.execute(
         """
@@ -3753,12 +3769,18 @@ def get_admin_analytics(
         """,
         (college_id,)
     ).fetchone()
-    ach_col = load_collection(db, "cc_ach") or []
-    col_pending = sum(1 for a in ach_col if isinstance(a, dict) and a.get("st") == "Pending")
-    col_verified = sum(1 for a in ach_col if isinstance(a, dict) and a.get("st") == "Verified")
-    total_ach = (ach_totals["total"] or 0) + len(ach_col)
-    pending_ach = (ach_totals["pending_cnt"] or 0) + col_pending
-    verified_ach = (ach_totals["verified_cnt"] or 0) + col_verified
+
+    total_ach = ach_totals["total"] or 0
+    pending_ach = ach_totals["pending_cnt"] or 0
+    verified_ach = ach_totals["verified_cnt"] or 0
+    rejected_ach = ach_totals["rejected_cnt"] or 0
+
+    if total_ach == 0:
+        ach_col = load_collection(db, "cc_ach") or []
+        pending_ach = sum(1 for a in ach_col if isinstance(a, dict) and a.get("st") == "Pending")
+        verified_ach = sum(1 for a in ach_col if isinstance(a, dict) and a.get("st") == "Verified")
+        rejected_ach = sum(1 for a in ach_col if isinstance(a, dict) and a.get("st") == "Rejected")
+        total_ach = len(ach_col)
 
     # 4. Campus Notices & Events & Issues
     notices_col = load_collection(db, "cc_nt") or []
@@ -3848,9 +3870,9 @@ def get_admin_analytics(
         "complaints": {
             "total": total_comp,
             "open": open_comp,
-            "in_progress": (comp_totals["in_prog_cnt"] or 0),
+            "in_progress": in_prog_comp,
             "resolved": resolved_comp,
-            "closed": (comp_totals["closed_cnt"] or 0),
+            "closed": closed_comp,
             "sla_resolution_rate": sla_resolution_rate,
             "by_category": complaints_by_category,
         },
@@ -3864,7 +3886,7 @@ def get_admin_analytics(
             "total": total_ach,
             "pending": pending_ach,
             "verified": verified_ach,
-            "rejected": ach_totals["rejected_cnt"] or 0,
+            "rejected": rejected_ach,
         },
         "resources": {
             "total_files": res_count[0] or 0,

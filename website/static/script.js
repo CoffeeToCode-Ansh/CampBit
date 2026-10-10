@@ -69,6 +69,30 @@ const isStaffRole = () => STAFF_ROLES.includes(getRole());
 const leaveBucket = () => isStaffRole() ? 'staff' : getRole();   // leave data keeps one "staff" bucket
 const ssGet = k => { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } };
 
+// Global safe bindings for NOTICES, currentUser, and notice persistence
+let currentUser = null;
+if (typeof window !== 'undefined') {
+  try {
+    Object.defineProperty(window, 'NOTICES', {
+      get() { return (typeof appData !== 'undefined' && Array.isArray(appData.notices)) ? appData.notices : []; },
+      set(v) { if (typeof appData !== 'undefined') appData.notices = v; },
+      configurable: true
+    });
+    Object.defineProperty(window, 'currentUser', {
+      get() {
+        const u = (sessionStorage.getItem('cc_user') || '').toLowerCase();
+        return { id: u, role: getRole(), name: (typeof displayName === 'function' ? displayName() : u), dept: (typeof myDeptName === 'function' ? myDeptName() : ssGet('cc_dept')) };
+      },
+      configurable: true
+    });
+    window.saveNotices = function() {
+      if (typeof customNotices !== 'undefined') {
+        saveJson('cc_nt', customNotices);
+      }
+    };
+  } catch (e) { }
+}
+
 // Escape text before putting it inside HTML (prevents broken markup / injection)
 const escapeHtml = value =>
   String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1548,10 +1572,13 @@ window.submitHodDeptNotice = function(e) {
   }
   const dateStr = new Date().toISOString().slice(0, 10);
   const newN = ['Academic', title, dateStr, body, `Dept:${myD.toUpperCase()}`, `${displayName()} (HOD)`, null, yr];
-  const list = NOTICES.slice();
-  list.unshift(newN);
-  NOTICES = list;
-  saveNotices();
+  if (typeof customNotices !== 'undefined') {
+    customNotices.unshift(newN);
+    saveJson('cc_nt', customNotices);
+  }
+  if (typeof appData !== 'undefined' && Array.isArray(appData.notices)) {
+    appData.notices.unshift(newN);
+  }
   showToast(getDomainI18n('deptNoticeSuccess'));
   hodNoticeFormOpen = false;
   refreshHodHome();
@@ -1672,7 +1699,8 @@ function renderHODHome() {
   const ttChanges = hodTimetableList || [];
 
   // 3. Department notices
-  const deptNotices = NOTICES.filter(n => {
+  const allNotices = (typeof appData !== 'undefined' && Array.isArray(appData.notices)) ? appData.notices : [];
+  const deptNotices = allNotices.filter(n => {
     const aud = String(n[4] || '');
     return aud.toLowerCase() === `dept:${myD.toLowerCase()}`;
   });
@@ -1732,7 +1760,9 @@ function renderHODHome() {
               ? renderEmptyState('🎉', 'No Pending Leaves', `All leave requests from students and staff in ${escapeHtml(myD)} have been decided.`)
               : `<div class="approval-list">
                   ${pendingLeaves.map(lv => {
-                    const isOwn = lv.user_id === (currentUser && currentUser.id);
+                    const curUser = (sessionStorage.getItem('cc_user') || '').toLowerCase();
+                    const isOwn = (lv.login_id && lv.login_id.toLowerCase() === curUser) ||
+                                  (lv.user_id && String(lv.user_id).toLowerCase() === curUser);
                     const isShort = (lv.days || 1) <= 3;
                     const daysLabel = isShort
                       ? `${lv.days} day(s) · Short Leave (HOD Final Approval)`
@@ -2412,7 +2442,7 @@ function renderPrincipalHome() {
           </div>
           <p class="sub" style="margin:0 0 10px">As Campus Director, your notices may target <b>Everyone</b>, <b>Students</b>, <b>Staff</b>, or specific departments and hostels.</p>
           <div style="display:flex;flex-direction:column;gap:8px;">
-            ${NOTICES.slice(0, 3).map(n => `
+            ${((typeof appData !== 'undefined' && Array.isArray(appData.notices)) ? appData.notices : []).slice(0, 3).map(n => `
               <div style="border-left:3px solid var(--accent);padding:8px 12px;background:rgba(0,0,0,0.02);border-radius:0 8px 8px 0">
                 <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap">
                   <b>${escapeHtml(n[1])}</b>
@@ -2484,7 +2514,9 @@ function renderHODLeavePage() {
           ? renderEmptyState('🎉', 'No Pending Leaves', `All leave requests from students and staff in ${escapeHtml(myD)} have been decided.`)
           : `<div class="approval-list">
               ${pendingLeaves.map(lv => {
-                const isOwn = lv.user_id === (currentUser && currentUser.id);
+                const curUser = (sessionStorage.getItem('cc_user') || '').toLowerCase();
+                const isOwn = (lv.login_id && lv.login_id.toLowerCase() === curUser) ||
+                              (lv.user_id && String(lv.user_id).toLowerCase() === curUser);
                 const isWaitingPrin = lv.stage === 'Waiting for Principal';
                 const isShort = (lv.days || 1) <= 3;
                 const daysLabel = isShort
@@ -2740,12 +2772,42 @@ function renderTodoWidget(roleKey, title) {
 // Staff profile page (shows the admin-edited record when the signed-in ID matches one)
 function renderStaffProfile() {
   const r = myStaff();
+  const role = getRole();
   const photo = myPhotoValue(r);
   const v = (key, demo) => escapeHtml(r ? (r[key] || '—') : demo);
   const empId = r ? escapeHtml(r.id) : escapeHtml(userName().toUpperCase());
   const name = r ? escapeHtml(r.name) : displayName();
-  const pos = r ? escapeHtml(r.pos + ' · ' + r.dept) : 'Assistant Professor · Computer Science';
-  const email = v('email', 'staff@college.example');
+
+  let badgeIcon = '🧑‍🏫';
+  let roleTag = '🧑‍🏫 Faculty Member';
+  let defaultPos = 'Assistant Professor';
+  let deptVal = (r && r.dept) || ssGet('cc_dept') || 'Computer Science & Engineering';
+
+  if (role === 'principal') {
+    badgeIcon = '🎓';
+    roleTag = '🎓 Principal & Campus Director';
+    defaultPos = 'Principal & Campus Director';
+    deptVal = 'Institutional Directorate & Academic Governance';
+  } else if (role === 'hod') {
+    badgeIcon = '🏛️';
+    roleTag = '🏛️ Head of Department (HOD)';
+    defaultPos = 'Head of Department';
+    deptVal = (r && r.dept) || ssGet('cc_dept') || 'Computer Science & Engineering';
+  } else if (role === 'warden') {
+    badgeIcon = '🏠';
+    roleTag = '🏠 Chief Hostel Warden';
+    defaultPos = 'Hostel Warden';
+    deptVal = (r && r.hostel) || ssGet('cc_hostel') || 'Student Residences & Hostels';
+  } else if (role === 'placement_officer') {
+    badgeIcon = '💼';
+    roleTag = '💼 Training & Placement Officer (TPO)';
+    defaultPos = 'Head TPO · Career & Corporate Relations';
+    deptVal = 'Training & Placement Directorate';
+  }
+
+  const pos = r && r.pos ? escapeHtml(r.pos + (r.dept ? ' · ' + r.dept : '')) : `${defaultPos} · ${deptVal}`;
+  const designation = (r && r.pos) ? escapeHtml(r.pos) : defaultPos;
+  const email = v('email', (empId ? empId.toLowerCase() : 'staff') + '@bput.ac.in');
 
   return `
     <div class="pf-page">
@@ -2754,13 +2816,13 @@ function renderStaffProfile() {
         <div class="pf-hero-body">
           <div class="pf-avatar-wrapper">
             <div class="avatar big pf-avatar-glow">${r ? avatarInner(photo, r.name) : avatarInner(photo)}</div>
-            <span class="pf-avatar-badge" title="Faculty">🧑‍🏫</span>
+            <span class="pf-avatar-badge" title="${escapeHtml(roleTag)}">${badgeIcon}</span>
           </div>
 
           <div class="pf-hero-details">
             <div class="pf-hero-badge-strip">
-              <span class="pf-role-tag pf-role-faculty">🧑‍🏫 Faculty Member</span>
-              <span class="pf-status-tag"><span class="pf-dot-pulse"></span> Active Staff</span>
+              <span class="pf-role-tag pf-role-faculty">${roleTag}</span>
+              <span class="pf-status-tag"><span class="pf-dot-pulse"></span> Active Institutional Staff</span>
               <span class="pf-campus-tag">🏛️ BPUT Main Campus</span>
             </div>
             <h2 class="pf-name">${name}</h2>
@@ -2779,7 +2841,7 @@ function renderStaffProfile() {
               </div>
               <div class="pf-chip">
                 <span class="pf-chip-icon">🏛️</span>
-                <span>${r ? escapeHtml(r.dept) : 'CSE'}</span>
+                <span>${escapeHtml(deptVal)}</span>
               </div>
             </div>
           </div>
@@ -2799,7 +2861,7 @@ function renderStaffProfile() {
             <span class="pf-card-icon">🏛️</span>
             <div>
               <h3>Department & Position</h3>
-              <p class="pf-card-head-sub">Academic responsibilities and location</p>
+              <p class="pf-card-head-sub">Institutional responsibilities and location</p>
             </div>
           </div>
           <div class="pf-info-list">
@@ -2809,19 +2871,19 @@ function renderStaffProfile() {
             </div>
             <div class="pf-info-row">
               <span class="pf-info-label">Department</span>
-              <span class="pf-info-val">${r ? escapeHtml(r.dept) : 'Computer Science & Engineering'}</span>
+              <span class="pf-info-val">${escapeHtml(deptVal)}</span>
             </div>
             <div class="pf-info-row">
               <span class="pf-info-label">Designation</span>
-              <span class="pf-info-val"><b>${r ? escapeHtml(r.pos) : 'Assistant Professor'}</b></span>
+              <span class="pf-info-val"><b>${designation}</b></span>
             </div>
             <div class="pf-info-row">
               <span class="pf-info-label">Cabin Location</span>
-              <span class="pf-info-val">${v('cabin', 'Block A, Room 12')}</span>
+              <span class="pf-info-val">${v('cabin', role === 'principal' ? 'Administrative Directorate, Room 101' : (role === 'hod' ? 'Department Head Office' : 'Faculty Block A, Room 12'))}</span>
             </div>
             <div class="pf-info-row">
-              <span class="pf-info-label">Subjects Taught</span>
-              <span class="pf-info-val">${v('subjects', 'Data Structures, Algorithms')}</span>
+              <span class="pf-info-label">${role === 'principal' ? 'Institutional Directorate' : (role === 'hod' ? 'Leadership Scope' : 'Subjects Taught')}</span>
+              <span class="pf-info-val">${v('subjects', role === 'principal' ? 'Campus Governance & Academic Regulation' : (role === 'hod' ? 'Curriculum Delivery & Department Management' : 'Data Structures, Algorithms'))}</span>
             </div>
             <div class="pf-info-row">
               <span class="pf-info-label">Joining Date</span>
@@ -8033,21 +8095,93 @@ async function loadAdminAnalytics(force = false) {
   const now = Date.now();
   if (!force && adminAnalyticsData && (now - adminAnalyticsLastFetch < 5000)) return;
   adminAnalyticsLoading = true;
-  try {
-    if (typeof API !== 'undefined' && API.getAdminAnalytics) {
-      const data = await API.getAdminAnalytics();
-      if (data && data.roster) {
-        adminAnalyticsData = data;
-        adminAnalyticsLastFetch = Date.now();
-      }
+
+  // Visual refreshing state ONLY on the audit log container
+  const auditWrap = $('recentAuditWrap');
+  if (auditWrap) {
+    auditWrap.classList.add('refreshing');
+    if (!$('auditRefreshOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'auditRefreshOverlay';
+      overlay.className = 'audit-refresh-overlay';
+      overlay.innerHTML = '<div class="audit-refresh-spinner"></div><span>Refreshing audit records from DB…</span>';
+      auditWrap.appendChild(overlay);
     }
+  }
+
+  // Animate the refresh button icon
+  const refBtn = $('analyticsRefresh');
+  if (refBtn) {
+    refBtn.innerHTML = '<span class="spin-icon">🔄</span> Refreshing…';
+    refBtn.disabled = true;
+  }
+  const cardRefBtn = $('overviewAuditRefresh');
+  if (cardRefBtn) {
+    cardRefBtn.innerHTML = '<span class="spin-icon">🔄</span> Refreshing…';
+    cardRefBtn.disabled = true;
+  }
+
+  try {
+    const minDelay = force ? new Promise(resolve => setTimeout(resolve, 600)) : Promise.resolve();
+    let fetchPromise = Promise.resolve();
+    if (typeof API !== 'undefined' && API.getAdminAnalytics) {
+      fetchPromise = API.getAdminAnalytics().then(data => {
+        if (data && data.roster) {
+          adminAnalyticsData = data;
+          adminAnalyticsLastFetch = Date.now();
+        }
+      });
+    }
+    await Promise.all([fetchPromise, minDelay]);
   } catch (err) {
     console.warn('Failed to fetch admin analytics:', err);
   } finally {
     adminAnalyticsLoading = false;
-    if (getRole() === 'admin' && appData.tab === 'home') {
-      const pg = $('pg-home');
-      if (pg) pg.innerHTML = renderAdminHome();
+
+    // Targeted update to the audit log preview
+    const tbody = $('recentAuditTbody');
+    const wrap = $('recentAuditWrap');
+    if (tbody && wrap) {
+      wrap.classList.remove('refreshing');
+      const overlay = $('auditRefreshOverlay');
+      if (overlay) overlay.remove();
+
+      const recentEvents = (adminAnalyticsData && adminAnalyticsData.audit && adminAnalyticsData.audit.recent_events) || [];
+      tbody.innerHTML = recentEvents.length ? recentEvents.slice(0, 5).map(e => `
+        <tr class="audit-updated-flash">
+          <td style="white-space:nowrap;color:var(--muted)">${formatAuditTime(e.created_at)}</td>
+          <td>
+            <div style="font-weight:700">${escapeHtml(e.user_name || e.login_id || 'System')}</div>
+            <div style="font-size:10.5px;color:var(--muted)">${escapeHtml(e.role || '—')} · ${escapeHtml(e.login_id || '—')}</div>
+          </td>
+        </tr>
+      `).join('') : `
+        <tr>
+          <td colspan="2" style="text-align:center;color:var(--muted);padding:16px">No recent audit events logged.</td>
+        </tr>
+      `;
+
+      const badge = $('auditLiveBadge');
+      if (badge) {
+        badge.innerHTML = '<span style="color:#10b981;font-weight:700">✓ Updated just now</span>';
+        setTimeout(() => {
+          if ($('auditLiveBadge')) $('auditLiveBadge').innerHTML = '● Live from DB';
+        }, 2500);
+      }
+    } else {
+      if (getRole() === 'admin' && appData.tab === 'home') {
+        const pg = $('pg-home');
+        if (pg) pg.innerHTML = renderAdminHome();
+      }
+    }
+
+    if (refBtn) {
+      refBtn.innerHTML = '🔄 Refresh';
+      refBtn.disabled = false;
+    }
+    if (cardRefBtn) {
+      cardRefBtn.innerHTML = '🔄 Refresh';
+      cardRefBtn.disabled = false;
     }
   }
 }
@@ -8061,7 +8195,27 @@ window.onCollectionSynced = function(key) {
 async function loadAdminAuditLogs(force = false) {
   if (adminAuditLoading && !force) return;
   adminAuditLoading = true;
+
+  const fullWrap = $('fullAuditWrap');
+  if (fullWrap) {
+    fullWrap.classList.add('refreshing');
+    if (!$('fullAuditOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'fullAuditOverlay';
+      overlay.className = 'audit-refresh-overlay';
+      overlay.innerHTML = '<div class="audit-refresh-spinner"></div><span>Refreshing full audit logs…</span>';
+      fullWrap.appendChild(overlay);
+    }
+  }
+  const alogRefBtn = $('alogRefresh');
+  if (alogRefBtn) {
+    alogRefBtn.innerHTML = '<span class="spin-icon">🔄</span> Refreshing…';
+    alogRefBtn.disabled = true;
+  }
+
   try {
+    const minDelay = force ? new Promise(resolve => setTimeout(resolve, 600)) : Promise.resolve();
+    let fetchPromise = Promise.resolve();
     if (typeof API !== 'undefined' && API.getAuditLogs) {
       const params = { limit: 50 };
       if (adminAuditFilter && adminAuditFilter !== 'ALL') {
@@ -8070,11 +8224,13 @@ async function loadAdminAuditLogs(force = false) {
       if (adminAuditSearch && adminAuditSearch.trim()) {
         params.login_id = adminAuditSearch.trim();
       }
-      const res = await API.getAuditLogs(params);
-      if (res && res.logs) {
-        adminAuditLogs = res.logs;
-      }
+      fetchPromise = API.getAuditLogs(params).then(res => {
+        if (res && res.logs) {
+          adminAuditLogs = res.logs;
+        }
+      });
     }
+    await Promise.all([fetchPromise, minDelay]);
   } catch (err) {
     console.warn('Failed to load audit logs:', err);
   } finally {
@@ -8219,20 +8375,6 @@ function renderAdminOverviewContent(metrics) {
           <span>7-day SLA resolution</span>
           <span class="db-tile-arrow">→</span>
         </div>
-      </button>
-
-      <button class="db-stat-tile db-accent-purple" data-go="achievements" type="button">
-        <div class="db-tile-top">
-          <div class="db-tile-icon-box">🏆</div>
-          <span class="db-tile-tag">${metrics.pendingAchievements ? 'Pending' : 'Verified'}</span>
-        </div>
-        <div class="db-tile-metric">${metrics.pendingAchievements}</div>
-        <div class="db-tile-title">Achievements Review</div>
-        <div class="db-tile-foot">
-          <span>Verify student awards</span>
-          <span class="db-tile-arrow">→</span>
-        </div>
-      </button>
     </div>
 
     <!-- Department Distribution & Analytics Section -->
@@ -8299,38 +8441,40 @@ function renderAdminOverviewContent(metrics) {
     <!-- Recent Audit Activity Preview Card -->
     <div class="analytics-section-card">
       <div class="analytics-card-header">
-        <div class="analytics-card-title">🛡️ Recent Security & Operational Audit Log</div>
-        <button class="btn ghost sm" data-atab="audit" type="button">Open Full Audit Trail (${metrics.totalEvents}) →</button>
-      </div>
-      ${recentEvents.length ? `
-        <div class="audit-table-wrap">
-          <table class="audit-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Operator</th>
-                <th>Action</th>
-                <th>Target Resource</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recentEvents.slice(0, 5).map(e => `
-                <tr>
-                  <td style="white-space:nowrap;color:var(--muted)">${formatAuditTime(e.created_at)}</td>
-                  <td>
-                    <div style="font-weight:700">${escapeHtml(e.user_name || e.login_id || 'System')}</div>
-                    <div style="font-size:10.5px;color:var(--muted)">${escapeHtml(e.role || '—')} · ${escapeHtml(e.login_id || '—')}</div>
-                  </td>
-                  <td><span class="audit-action-badge ${auditActionBadgeClass(e.action)}">${escapeHtml(e.action)}</span></td>
-                  <td><b>${escapeHtml(e.resource_type || '—')}</b> ${e.resource_id ? `#${escapeHtml(e.resource_id)}` : ''}</td>
-                  <td style="max-width:280px;font-size:11.5px">${formatAuditDetails(e.details)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+        <div class="analytics-card-title">
+          🛡️ Recent Security & Operational Audit Log
+          <span id="auditLiveBadge" style="font-size:11px;font-weight:600;color:var(--muted);margin-left:8px">● Live from DB</span>
         </div>
-      ` : `<p style="color:var(--muted);font-size:13px;margin:0">No recent audit events logged.</p>`}
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn ghost sm" id="overviewAuditRefresh" type="button" title="Refresh audit log">🔄 Refresh</button>
+          <button class="btn ghost sm" data-atab="audit" type="button">Open Full Audit Trail (${metrics.totalEvents}) →</button>
+        </div>
+      </div>
+      <div class="audit-table-wrap" id="recentAuditWrap">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Operator</th>
+            </tr>
+          </thead>
+          <tbody id="recentAuditTbody">
+            ${recentEvents.length ? recentEvents.slice(0, 5).map(e => `
+              <tr>
+                <td style="white-space:nowrap;color:var(--muted)">${formatAuditTime(e.created_at)}</td>
+                <td>
+                  <div style="font-weight:700">${escapeHtml(e.user_name || e.login_id || 'System')}</div>
+                  <div style="font-size:10.5px;color:var(--muted)">${escapeHtml(e.role || '—')} · ${escapeHtml(e.login_id || '—')}</div>
+                </td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="2" style="text-align:center;color:var(--muted);padding:16px">No recent audit events logged.</td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     ${renderNotifications()}
@@ -8392,7 +8536,7 @@ function renderAdminAuditContent(cid) {
           <div>Loading institutional audit records from database...</div>
         </div>
       ` : (logs && logs.length ? `
-        <div class="audit-table-wrap">
+        <div class="audit-table-wrap" id="fullAuditWrap">
           <table class="audit-table">
             <thead>
               <tr>
@@ -8447,10 +8591,7 @@ function renderAdminHome() {
   const cid = (adminAnalyticsData && adminAnalyticsData.college_id) ? adminAnalyticsData.college_id : 'BPUT';
   const openComplaints = adminAnalyticsData && adminAnalyticsData.complaints
     ? (adminAnalyticsData.complaints.open + adminAnalyticsData.complaints.in_progress)
-    : COMPLAINTS.filter(c => c.st < 3).length;
-  const pendingAchievements = adminAnalyticsData && adminAnalyticsData.achievements
-    ? adminAnalyticsData.achievements.pending
-    : ACHIEVEMENTS.filter(a => a.st === 'Pending').length;
+    : COMPLAINTS.filter(c => c.st < 3 && !c.closed).length;
   const totalStudents = adminAnalyticsData && adminAnalyticsData.roster
     ? adminAnalyticsData.roster.students
     : STUDENTS.length;
@@ -8510,7 +8651,7 @@ function renderAdminHome() {
 
       ${adminHomeTab === 'overview' ? renderAdminOverviewContent({
         totalStudents, totalStaff, totalUsers, activeNotices, openComplaints, slaRate,
-        pendingAchievements, totalEvents, cid
+        totalEvents, cid
       }) : renderAdminAuditContent(cid)}
     </div>
   `;
@@ -8838,8 +8979,41 @@ function myStudent() {
 }
 function myStaff() {
   if (!isStaffRole()) return null;
-  const u = userName().toLowerCase();
-  return STAFF_LIST.find(x => x.id.toLowerCase() === u || (x.email && x.email.split('@')[0].toLowerCase() === u)) || null;
+  const raw = sessionStorage.getItem('cc_user') || userName() || '';
+  const u = raw.toLowerCase().trim();
+  const cu = cleanId(u);
+  const found = STAFF_LIST.find(x => {
+    if (!x || !x.id) return false;
+    const xid = String(x.id).toLowerCase().trim();
+    if (xid === u || (cu && cleanId(xid) === cu)) return true;
+    if (x.email && x.email.split('@')[0].toLowerCase().trim() === u) return true;
+    return false;
+  });
+  if (found) return found;
+
+  // Authoritative fallback so staff profile & dashboards always have complete information
+  const rk = getRole();
+  const sName = sessionStorage.getItem('cc_name') || displayName();
+  const sDept = sessionStorage.getItem('cc_dept') || (rk === 'principal' ? 'Institutional Directorate' : 'CSE');
+  const sHostel = sessionStorage.getItem('cc_hostel') || '';
+  const sPhoto = sessionStorage.getItem('cc_photo') || '';
+  const defaultPos = rk === 'principal' ? 'Principal & Campus Director'
+    : (rk === 'hod' ? 'Head of Department (HOD)'
+    : (rk === 'warden' ? 'Hostel Warden'
+    : (rk === 'placement_officer' ? 'Training & Placement Officer'
+    : 'Faculty Member')));
+  return {
+    id: raw.toUpperCase() || (rk === 'principal' ? '9013' : '2401219013'),
+    name: sName,
+    dept: sDept,
+    hostel: sHostel,
+    pos: defaultPos,
+    email: raw.includes('@') ? raw : `${raw.toLowerCase() || 'staff'}@bput.ac.in`,
+    phone: '',
+    joined: '2024',
+    subjects: rk === 'principal' ? 'Institutional Administration' : (rk === 'hod' ? 'Advanced Computing & Dept Affairs' : 'Computer Science & Engineering'),
+    photo: sPhoto
+  };
 }
 
 // Admin may edit anyone's profile; staff may edit students' profiles (same rule as the Edit button in the lists)
@@ -10096,8 +10270,10 @@ function renderDayView() {
 function renderBasePages() {
   renderTabs();
 
-  // --- Student home ---
-  $('pg-home').innerHTML = `
+  const role = getRole();
+  if (role === 'student' && $('pg-home')) {
+    // --- Student home ---
+    $('pg-home').innerHTML = `
     <div class="db-page">
       <div class="db-hero-card">
         <div class="db-hero-main">
@@ -10171,30 +10347,39 @@ function renderBasePages() {
       ${renderTodayTimetable()}
     </div>
   `;
+  }
 
   // --- Timetable (Week / Day switch + .ics export) ---
-  $('pg-timetable').innerHTML =
-    `<div class="tt-header-row" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">` +
-    `  <div><h2 style="margin:0">Timetable</h2><p class="sub" style="margin:4px 0 0 0">${isStaffRole() ? 'Your teaching schedule' : 'Semester 3 · Computer Science'}</p></div>` +
-    `  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">` +
-    `    <button class="btn sm" data-ics type="button" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(139,92,246,0.2));border:1px solid rgba(99,102,241,0.4);color:var(--text);display:inline-flex;align-items:center;gap:6px" title="Export to Google Calendar, Apple Calendar or Outlook"><span>📅</span> Export (.ics)</button>` +
-    `    <div class="chips" style="margin:0"><button class="chip ${timetableView === 'week' ? 'on' : ''}" data-tv="week">Week</button>` +
-    `    <button class="chip ${timetableView === 'day' ? 'on' : ''}" data-tv="day">Day</button></div>` +
-    `  </div>` +
-    `</div>` +
-    (timetableView === 'week' ? renderWeekTable() : renderDayView());
+  if ($('pg-timetable')) {
+    $('pg-timetable').innerHTML =
+      `<div class="tt-header-row" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">` +
+      `  <div><h2 style="margin:0">Timetable</h2><p class="sub" style="margin:4px 0 0 0">${isStaffRole() ? 'Your teaching schedule' : 'Semester 3 · Computer Science'}</p></div>` +
+      `  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">` +
+      `    <button class="btn sm" data-ics type="button" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(139,92,246,0.2));border:1px solid rgba(99,102,241,0.4);color:var(--text);display:inline-flex;align-items:center;gap:6px" title="Export to Google Calendar, Apple Calendar or Outlook"><span>📅</span> Export (.ics)</button>` +
+      `    <div class="chips" style="margin:0"><button class="chip ${timetableView === 'week' ? 'on' : ''}" data-tv="week">Week</button>` +
+      `    <button class="chip ${timetableView === 'day' ? 'on' : ''}" data-tv="day">Day</button></div>` +
+      `  </div>` +
+      `</div>` +
+      (timetableView === 'week' ? renderWeekTable() : renderDayView());
+  }
 
   // --- Fees (Roadmap) ---
-  $('pg-fees').innerHTML = renderRoadmap(
-    'Tuition & Campus Fees',
-    '💳',
-    'Phase 2 Milestone · Payment Gateway Integration',
-    'Challan generation and online fee reconciliation requires integration with State Bank Collect / Billdesk ERP webhooks.',
-    'Simulated payment buttons and mock fee liabilities have been retired to preserve operational integrity. Official accounting ledger sync will activate in the next administrative release.'
-  );
+  if ($('pg-fees')) {
+    $('pg-fees').innerHTML = renderRoadmap(
+      'Tuition & Campus Fees',
+      '💳',
+      'Phase 2 Milestone · Payment Gateway Integration',
+      'Challan generation and online fee reconciliation requires integration with State Bank Collect / Billdesk ERP webhooks.',
+      'Simulated payment buttons and mock fee liabilities have been retired to preserve operational integrity. Official accounting ledger sync will activate in the next administrative release.'
+    );
+  }
 
-  // --- Student profile ---
-  $('pg-profile').innerHTML = renderStudentProfile();
+  // --- Authoritative profile based on role ---
+  if ($('pg-profile')) {
+    if (role === 'admin') $('pg-profile').innerHTML = renderAdminProfile();
+    else if (isStaffRole()) $('pg-profile').innerHTML = renderStaffProfile();
+    else $('pg-profile').innerHTML = renderStudentProfile();
+  }
 
   // --- Events & Fests page ---
   if ($('pg-events')) $('pg-events').innerHTML = renderEvents();
@@ -10371,53 +10556,53 @@ function render() {
         if (hasTab('recruit')) $('pg-recruit').innerHTML = renderRecruitAdmin();
         if (hasTab('resources')) $('pg-resources').innerHTML = renderResources();
       } else if (role === 'principal') {
-        $('pg-home').innerHTML = renderPrincipalHome();
-        $('pg-profile').innerHTML = renderStaffProfile();
-        if (hasTab('classes')) $('pg-classes').innerHTML = renderHodClassTracking();
-        if (hasTab('students')) $('pg-students').innerHTML = renderStudents();
-        if (hasTab('complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
-        if (hasTab('resources')) $('pg-resources').innerHTML = renderResources();
-        if (hasTab('achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
+        try { if ($('pg-home')) $('pg-home').innerHTML = renderPrincipalHome(); } catch (e) { console.error('Principal home render error:', e); }
+        if ($('pg-profile')) $('pg-profile').innerHTML = renderStaffProfile();
+        if (hasTab('classes') && $('pg-classes')) $('pg-classes').innerHTML = renderHodClassTracking();
+        if (hasTab('students') && $('pg-students')) $('pg-students').innerHTML = renderStudents();
+        if (hasTab('complaints') && $('pg-complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
+        if (hasTab('resources') && $('pg-resources')) $('pg-resources').innerHTML = renderResources();
+        if (hasTab('achievements') && $('pg-achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
       } else if (role === 'hod') {
-        $('pg-home').innerHTML = renderHODHome();
-        $('pg-profile').innerHTML = renderStaffProfile();
-        if (hasTab('attendance')) $('pg-attendance').innerHTML = renderTeacherAttendance();
-        if (hasTab('students')) $('pg-students').innerHTML = renderStudents();
-        if (hasTab('achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
-        if (hasTab('timetable')) $('pg-timetable').innerHTML += simulationButton();
-        if (hasTab('complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
-        if (hasTab('resources')) $('pg-resources').innerHTML = renderResources();
-        if (hasTab('classes')) $('pg-classes').innerHTML = renderHodClassTracking();
+        try { if ($('pg-home')) $('pg-home').innerHTML = renderHODHome(); } catch (e) { console.error('HOD home render error:', e); }
+        if ($('pg-profile')) $('pg-profile').innerHTML = renderStaffProfile();
+        if (hasTab('attendance') && $('pg-attendance')) $('pg-attendance').innerHTML = renderTeacherAttendance();
+        if (hasTab('students') && $('pg-students')) $('pg-students').innerHTML = renderStudents();
+        if (hasTab('achievements') && $('pg-achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
+        if (hasTab('timetable') && $('pg-timetable')) $('pg-timetable').innerHTML += simulationButton();
+        if (hasTab('complaints') && $('pg-complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
+        if (hasTab('resources') && $('pg-resources')) $('pg-resources').innerHTML = renderResources();
+        if (hasTab('classes') && $('pg-classes')) $('pg-classes').innerHTML = renderHodClassTracking();
       } else {
         $('pg-home').innerHTML = renderStaffHome();
         $('pg-profile').innerHTML = renderStaffProfile();
-        if (hasTab('attendance')) $('pg-attendance').innerHTML = renderTeacherAttendance();
-        if (hasTab('students')) $('pg-students').innerHTML = renderStudents();
-        if (hasTab('achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
-        if (hasTab('timetable')) $('pg-timetable').innerHTML += simulationButton();
-        if (hasTab('complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
-        if (hasTab('resources')) $('pg-resources').innerHTML = renderResources();
-        if (hasTab('recruit')) $('pg-recruit').innerHTML = renderRecruitAdmin();
+        if (hasTab('attendance') && $('pg-attendance')) $('pg-attendance').innerHTML = renderTeacherAttendance();
+        if (hasTab('students') && $('pg-students')) $('pg-students').innerHTML = renderStudents();
+        if (hasTab('achievements') && $('pg-achievements')) $('pg-achievements').innerHTML = renderAchievementReview();
+        if (hasTab('timetable') && $('pg-timetable')) $('pg-timetable').innerHTML += simulationButton();
+        if (hasTab('complaints') && $('pg-complaints')) $('pg-complaints').innerHTML = renderStaffComplaints();
+        if (hasTab('resources') && $('pg-resources')) $('pg-resources').innerHTML = renderResources();
+        if (hasTab('recruit') && $('pg-recruit')) $('pg-recruit').innerHTML = renderRecruitAdmin();
       }
     } else {
       // student
-      $('pg-results').innerHTML = renderResults();
-      $('pg-attendance').innerHTML = renderStudentAttendance();
-      $('pg-opps').innerHTML = renderOpportunities();
-      $('pg-achievements').innerHTML = renderStudentAchievements();
-      $('pg-complaints').innerHTML = renderComplaints();
-      $('pg-mess').innerHTML = renderMess();
+      if ($('pg-results')) $('pg-results').innerHTML = renderResults();
+      if ($('pg-attendance')) $('pg-attendance').innerHTML = renderStudentAttendance();
+      if ($('pg-opps')) $('pg-opps').innerHTML = renderOpportunities();
+      if ($('pg-achievements')) $('pg-achievements').innerHTML = renderStudentAchievements();
+      if ($('pg-complaints')) $('pg-complaints').innerHTML = renderComplaints();
+      if ($('pg-mess')) $('pg-mess').innerHTML = renderMess();
       if (recState === null || recStale) loadRecruiting();       // contact requests + recruiter visibility
-      $('pg-resources').innerHTML = renderResources();
+      if ($('pg-resources')) $('pg-resources').innerHTML = renderResources();
     }
-    $('pg-leave').innerHTML = role === 'principal' ? renderPrincipalLeavePage() : (role === 'hod' ? renderHODLeavePage() : renderLeave());
+    if ($('pg-leave')) $('pg-leave').innerHTML = role === 'principal' ? renderPrincipalLeavePage() : (role === 'hod' ? renderHODLeavePage() : renderLeave());
   }
 
   // Shared by all roles
   if (hasTab('classes') && $('pg-classes')) $('pg-classes').innerHTML = renderHodClassTracking();
   if (hasTab('exams') && $('pg-exams')) $('pg-exams').innerHTML = renderExaminations();
-  $('pg-notices').innerHTML = renderNotices();
-  $('pg-holidays').innerHTML = renderHolidaysPage();
+  if ($('pg-notices')) $('pg-notices').innerHTML = renderNotices();
+  if ($('pg-holidays')) $('pg-holidays').innerHTML = renderHolidaysPage();
   if ($('pg-events')) $('pg-events').innerHTML = renderEvents();
 
   translatePage(document.body);
@@ -11308,7 +11493,7 @@ document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#alogSearchBtn';
+const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn';
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -11547,7 +11732,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'alogRefresh') {
     loadAdminAuditLogs(true);
   }
-  else if (t.id === 'analyticsRefresh') {
+  else if (t.id === 'analyticsRefresh' || t.id === 'overviewAuditRefresh') {
     loadAdminAnalytics(true);
   }
   else if (t.id === 'alogSearchBtn') {
@@ -11979,11 +12164,6 @@ function signIn() {
 
   // Real sign-in: the server checks ID, password and role
   API.login(user, pass, loginRole).then(async data => {
-    try { await API.hydrate(); sessionStorage.setItem('cc_hyd', '1'); } catch (e) { }   // load shared data
-    $('formPane').classList.add('hidden');
-    $('donePane').classList.remove('hidden');
-    setLoading(false);
-    const greetMs = greetGuard(data.name);
     try {
       sessionStorage.setItem('cc_in', '1');
       sessionStorage.setItem('cc_role', data.role);
@@ -11995,6 +12175,11 @@ function signIn() {
       if (data.photo) sessionStorage.setItem('cc_photo', data.photo);
       sessionStorage.setItem('cc_user', who.includes('@') ? who.split('@')[0] : who);
     } catch (e) { }
+    try { await API.hydrate(); sessionStorage.setItem('cc_hyd', '1'); } catch (e) { }   // load shared data
+    $('formPane').classList.add('hidden');
+    $('donePane').classList.remove('hidden');
+    setLoading(false);
+    const greetMs = greetGuard(data.name);
     // reload so the app starts with the server data (a little later when the guard is greeting)
     setTimeout(() => location.reload(), greetMs || 1000);
   }).catch(e => { setLoading(false); failSignIn(e.message); });

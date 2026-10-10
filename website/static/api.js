@@ -359,10 +359,22 @@
     });
   });
 
-  // Already signed in from before this update: fetch the account name once
-  if (getToken() && !sessionStorage.getItem('cc_name')) {
+  // Authoritative session restoration: verify and synchronize role, department and user identity with /api/me
+  if (getToken()) {
     request('/api/me').then(me => {
-      if (me && me.name) { sessionStorage.setItem('cc_name', me.name); location.reload(); }
+      if (me && me.role) {
+        let changed = false;
+        if (sessionStorage.getItem('cc_role') !== me.role) { sessionStorage.setItem('cc_role', me.role); changed = true; }
+        if (me.name && sessionStorage.getItem('cc_name') !== me.name) { sessionStorage.setItem('cc_name', me.name); changed = true; }
+        if (me.dept && sessionStorage.getItem('cc_dept') !== me.dept) { sessionStorage.setItem('cc_dept', me.dept); changed = true; }
+        if (me.hostel && sessionStorage.getItem('cc_hostel') !== me.hostel) { sessionStorage.setItem('cc_hostel', me.hostel); changed = true; }
+        const who = me.login_id ? (me.login_id.includes('@') ? me.login_id.split('@')[0] : me.login_id) : '';
+        if (who && sessionStorage.getItem('cc_user') !== who) { sessionStorage.setItem('cc_user', who); changed = true; }
+        if (sessionStorage.getItem('cc_in') !== '1') { sessionStorage.setItem('cc_in', '1'); changed = true; }
+        if (changed) {
+          location.reload();
+        }
+      }
     }).catch(() => {});
   }
 
