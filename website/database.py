@@ -16,10 +16,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
-
 BASE = Path(__file__).resolve().parent
-load_dotenv(BASE / ".env")
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE / ".env")
+except ImportError:
+    _env_file = BASE / ".env"
+    if _env_file.is_file():
+        try:
+            with open(_env_file, "r", encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k, _v = _k.strip(), _v.strip().strip("\"'")
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB_PATH = Path(os.environ.get("DATABASE_PATH", str(BASE / "app.db")))
@@ -217,6 +232,9 @@ def get_sqlite_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA cache_size = -64000;")       # 64MB memory page cache
+    conn.execute("PRAGMA temp_store = MEMORY;")        # In-memory temporary tables & query sorts
+    conn.execute("PRAGMA mmap_size = 268435456;")      # 256MB memory-mapped I/O for ultrafast reads
     return conn
 
 
@@ -502,19 +520,29 @@ CREATE INDEX IF NOT EXISTS idx_users_login_id ON users(login_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_college_id ON users(college_id);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users(college_id, role);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_login ON users(college_id, login_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_user_id ON leaves(user_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_leaves_college_id ON leaves(college_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_tenant_user ON leaves(college_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_tenant_status ON leaves(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_college_id ON achievements(college_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
+CREATE INDEX IF NOT EXISTS idx_complaints_tenant_user ON complaints(college_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_complaints_tenant_status ON complaints(college_id, status);
+CREATE INDEX IF NOT EXISTS idx_complaints_tenant_cat ON complaints(college_id, category);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_session_student ON attendance(session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_college_id ON audit_logs(college_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_created ON audit_logs(college_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_resources_tenant_dept ON resources(college_id, dept);
 CREATE INDEX IF NOT EXISTS idx_certificates_college_id ON certificates(college_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_cert_id ON certificates(cert_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_student_roll ON certificates(student_roll);
@@ -787,19 +815,29 @@ CREATE INDEX IF NOT EXISTS idx_users_login_id ON users(login_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_college_id ON users(college_id);
+CREATE INDEX IF NOT EXISTS idx_pg_users_tenant_role ON users(college_id, role);
+CREATE INDEX IF NOT EXISTS idx_pg_users_tenant_login ON users(college_id, login_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_user_id ON leaves(user_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_leaves_college_id ON leaves(college_id);
+CREATE INDEX IF NOT EXISTS idx_pg_leaves_tenant_user ON leaves(college_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_pg_leaves_tenant_status ON leaves(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_college_id ON achievements(college_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_college_id ON complaints(college_id);
+CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_user ON complaints(college_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_status ON complaints(college_id, status);
+CREATE INDEX IF NOT EXISTS idx_pg_complaints_tenant_cat ON complaints(college_id, category);
 CREATE INDEX IF NOT EXISTS idx_issues_user_id ON issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_session_id ON attendance_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_pg_attendance_session_student ON attendance(session_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_college_id ON audit_logs(college_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_pg_audit_logs_tenant_created ON audit_logs(college_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pg_resources_tenant_dept ON resources(college_id, dept);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_college_id ON certificates(college_id);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_cert_id ON certificates(cert_id);
 CREATE INDEX IF NOT EXISTS idx_pg_certificates_student_roll ON certificates(student_roll);

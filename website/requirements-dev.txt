@@ -1,0 +1,5 @@
+# QA, Automated Testing, and E2E Browser Automation Suite
+-r requirements.txt
+pytest>=8.0.0
+httpx>=0.25.0
+playwright>=1.40.0
