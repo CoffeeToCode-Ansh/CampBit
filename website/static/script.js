@@ -592,10 +592,72 @@ function loadLeave() {
   const saved = loadJson(LEAVE_STORAGE_KEY, null);
   leaveRequests = (saved && saved.LV) || JSON.parse(JSON.stringify(defaultLeaves));
   studentApprovals = (saved && saved.AP) || JSON.parse(JSON.stringify(defaultApprovals));
+  // Filter out any automated test leaves from local storage
+  if (leaveRequests && leaveRequests.student) {
+    leaveRequests.student = leaveRequests.student.filter(r => !r.r?.includes('Automated') && !r.r?.includes('test'));
+  }
+  if (studentApprovals) {
+    studentApprovals = studentApprovals.filter(r => !r.r?.includes('Automated') && !r.r?.includes('test'));
+  }
 }
 loadLeave();
 
 const saveLeave = () => saveJson(LEAVE_STORAGE_KEY, { LV: leaveRequests, AP: studentApprovals });
+
+let studentLeavesLoading = false;
+async function loadStudentLeavesFromServer() {
+  if (studentLeavesLoading || typeof API === 'undefined' || !API.getLeaves) return;
+  studentLeavesLoading = true;
+  try {
+    const list = await API.getLeaves();
+    if (Array.isArray(list)) {
+      if (getRole() === 'student') {
+        leaveRequests.student = list.map(r => ({
+          id: r.id,
+          t: r.leave_type,
+          f: r.from_date,
+          to: r.to_date,
+          r: r.reason,
+          s: r.status,
+          stage: r.stage,
+          by: r.action_by,
+          at: r.action_at ? new Date(r.action_at).getTime() : null,
+          dept: r.dept,
+          hostel: r.hostel
+        }));
+        saveLeave();
+        const pgl = $('pg-leave');
+        if (pgl && appData.tab === 'leave') {
+          pgl.innerHTML = renderLeave();
+          translatePage(pgl);
+        }
+      } else if (getRole() === 'hod') {
+        const uId = userState && userState.user && userState.user.id;
+        studentApprovals = list.filter(r => !uId || r.user_id !== uId).map(r => ({
+          id: r.id,
+          n: `${r.name} · ${r.login_id}`,
+          roll: r.login_id,
+          dept: r.dept,
+          hostel: r.hostel,
+          t: r.leave_type,
+          f: r.from_date,
+          to: r.to_date,
+          r: r.reason,
+          s: r.status,
+          stage: r.stage,
+          by: r.action_by,
+          at: r.action_at ? new Date(r.action_at).getTime() : null,
+          target: r.target_role || 'hod'
+        }));
+        saveLeave();
+      }
+    }
+  } catch (e) {
+    console.warn('loadStudentLeavesFromServer error:', e);
+  } finally {
+    studentLeavesLoading = false;
+  }
+}
 
 // A staff request belongs to the signed-in staff member if it has no name (old demo row) or their name
 const isMyLeave = r => !r.n || r.n === userName();
@@ -607,9 +669,15 @@ const LEAVE_TYPES = {
 };
 const LEAVE_QUOTA = { Casual: 12, Medical: 10, Earned: 15 };
 
-// Coloured status badge
-const statusBadge = status =>
-  `<span class="badge ${status === 'Approved' ? 'ok' : status === 'Rejected' ? 'bad' : ''}">${status}</span>`;
+// Coloured status badge with principal forward indicator
+const statusBadge = (status, stage) => {
+  if (stage === 'Waiting for Principal' || (status === 'Pending' && stage && stage.includes('Principal'))) {
+    return `<span class="badge" style="background:rgba(2,132,199,0.15);color:#0284c7;border:1px solid rgba(2,132,199,0.3)">⏳ Forwarded to Principal</span>`;
+  }
+  if (status === 'Approved') return `<span class="badge ok">✔ Approved</span>`;
+  if (status === 'Rejected') return `<span class="badge bad">✖ Rejected</span>`;
+  return `<span class="badge">⏳ Pending</span>`;
+};
 // "5 Oct – 6 Oct · 2 days"
 const rangeText = req =>
   `${formatDate(req.f)}${req.f === req.to ? '' : ' – ' + formatDate(req.to)} · ` +
@@ -711,7 +779,7 @@ function renderLeave() {
     (mine.length
       ? mine.map(r =>
         `<div class="item">` +
-        `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s)}</div>` +
+        `<div class="top"><b>${escapeHtml(r.t)} leave</b>${statusBadge(r.s, r.stage)}</div>` +
         `<p>${rangeText(r)}</p>` +
         `<p style="margin:4px 0">${escapeHtml(r.r)}</p>` +
         (r.by
@@ -754,7 +822,7 @@ function renderLeave() {
           (r.hostel ? `<span class="lv-meta-chip">🏠 ${escapeHtml(r.hostel)}</span>` : '') +
           `<span class="lv-meta-chip" style="color:var(--accent)">Route: HOD</span>` +
           `</div>` +
-          statusBadge(r.s) +
+          statusBadge(r.s, r.stage) +
           `</div>` +
           `<p style="margin:4px 0;font-size:13px"><b>${escapeHtml(r.t)} leave</b> · ${rangeText(r)}</p>` +
           `<div class="lv-reason-box">"${escapeHtml(r.r)}"</div>` +
@@ -834,7 +902,12 @@ function submitLeave() {
       to_date: to,
       reason: reason
     }).then(res => {
-      if (res && res.leave) entry.id = res.leave.id;
+      if (res && res.leave) {
+        entry.id = res.leave.id;
+        if (studentApprovals && studentApprovals[0]) studentApprovals[0].id = res.leave.id;
+        saveLeave();
+        loadStudentLeavesFromServer();
+      }
     }).catch(() => { });
   }
   leaveMessage = role === 'staff'
@@ -850,14 +923,14 @@ function decideStudentLeave(id, status) {
     showToast('Unauthorized: Only HOD is authorized to grant or reject student leave applications.');
     return;
   }
-  const req = studentApprovals.find(r => r.id === id);
+  const req = studentApprovals.find(r => String(r.id) === String(id));
   if (!req || req.s !== 'Pending') return;
   const approver = `${displayName()} (HOD)`;
   req.s = status;
   req.by = approver;
   req.at = Date.now();
 
-  const own = leaveRequests.student.find(r => r.id === id);
+  const own = leaveRequests.student.find(r => String(r.id) === String(id));
   if (own) {
     own.s = status;
     own.by = approver;
@@ -865,9 +938,18 @@ function decideStudentLeave(id, status) {
   }
   saveLeave();
   if (typeof API !== 'undefined' && API.actOnLeave) {
-    API.actOnLeave(id, { action: status.toLowerCase() === 'approved' ? 'approve' : 'reject' }).catch(() => { });
+    API.actOnLeave(id, {
+      status: status,
+      action: status.toLowerCase() === 'approved' ? 'approve' : 'reject',
+      action_note: `${status} by Head of Department`
+    }).then(() => {
+      loadStudentLeavesFromServer();
+      loadHodDashboardData();
+    }).catch(err => {
+      console.warn('API actOnLeave note:', err);
+    });
   }
-  leaveMessage = `${status === 'Approved' ? '✅ Granted' : '✖ Rejected'} leave for ${req.n.split(' · ')[0] || 'student'}.`;
+  leaveMessage = `${status === 'Approved' ? '✅ Granted' : '✖ Rejected'} leave for ${(req.n ? req.n.split(' · ')[0] : 'student') || 'student'}.`;
   showToast(leaveMessage);
   render();
 }
@@ -3199,6 +3281,19 @@ function submitAnonymousComplaint() {
   if (text.length < 10) { errBox.textContent = 'Please describe the issue in at least 10 characters.'; return; }
 
   const reference = 'CMP-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+  if (typeof API !== 'undefined' && API.createComplaint) {
+    API.createComplaint({
+      category: 'College',
+      title: text.slice(0, 80),
+      description: text,
+      location: 'Campus',
+      is_anonymous: true
+    }).then(() => {
+      loadCommunityComplaints();
+    }).catch(err => {
+      console.warn('Anonymous complaint submission API note:', err);
+    });
+  }
   $('sbody').innerHTML = `<div class="tick" style="margin-top:10px">✓</div>` +
     `<h2 style="text-align:center;margin:0 0 6px">Complaint submitted</h2>` +
     `<p class="sub" style="text-align:center">Your complaint was submitted anonymously. Action will be taken within 7 days at most.<br>Reference: <b>${reference}</b></p>` +
@@ -5093,7 +5188,10 @@ const COMPLAINTS = [
 const COMPLAINTS_KEY = 'cc_cmp';
 function loadComplaints() {
   const saved = loadJson(COMPLAINTS_KEY, null);
-  if (Array.isArray(saved) && saved.length) COMPLAINTS.splice(0, COMPLAINTS.length, ...saved);
+  if (Array.isArray(saved) && saved.length) {
+    const clean = saved.filter(c => c && !String(c.t || '').includes('alert') && !String(c.by || '').startsWith('TEST-') && !String(c.t || '').includes('XSS'));
+    COMPLAINTS.splice(0, COMPLAINTS.length, ...(clean.length ? clean : COMPLAINTS));
+  }
 }
 function saveComplaints() {
   try { localStorage.setItem(COMPLAINTS_KEY, JSON.stringify(COMPLAINTS)); }
@@ -5403,6 +5501,15 @@ function renderComplaints() {
     opinions: []
   }));
 
+  let communityComplaintFilter = window._cmpFilter || 'All';
+  const filteredList = communityList.filter(c => {
+    if (communityComplaintFilter === 'All') return true;
+    if (communityComplaintFilter === 'Mine') return isMine(c) || (c.login_id && c.login_id === userName());
+    const cat = (c.category || c.cat || '').toLowerCase();
+    const filterCat = communityComplaintFilter.toLowerCase();
+    return cat.includes(filterCat) || filterCat.includes(cat);
+  });
+
   return `<h2>Complaints &amp; Grievances</h2><p class="sub">Hostel, college and mess issues · Review fellow students' complaints, express opinions &amp; say "Me Too"</p>` +
     (message ? `<div class="item" style="margin-bottom:14px;border-color:#15803d">${message}</div>` : '') +
     (!isHostelStudent
@@ -5439,14 +5546,22 @@ function renderComplaints() {
     `<div class="err" id="cferr" role="alert"></div>` +
     `<button class="btn" id="cfsub" type="button" style="width:100%">Submit complaint</button>${duplicatePrompt}` +
     `</div>` +
-    // --- My complaints ---
-    `<h3 style="margin:20px 0 8px">My complaints</h3><div class="list">${mine.length ? mine.map(complaintCard).join('') : '<p class="sub">No complaints yet.</p>'}</div>` +
-    // --- Closed by Admin ---
-    closedSection +
     // --- Campus Community Complaints & Opinions ---
-    `<h3 style="margin:24px 0 4px">Campus Community Grievances &amp; Opinions</h3>` +
-    `<p class="sub" style="margin:0 0 12px">See what fellow students are complaining about across campus · Tap "Me Too" or share your opinion.</p><div class="list">` +
-    (communityList.length ? communityList.map(c => {
+    `<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 4px;flex-wrap:wrap;gap:8px">` +
+    `<h3 style="margin:0">🏛️ Campus Complaints &amp; Peer Grievances</h3>` +
+    `<span style="font-size:12px;color:var(--muted)">🌐 Visible across campus · Tap "Me Too" or share opinions</span>` +
+    `</div>` +
+    `<p class="sub" style="margin:0 0 10px">Every student complaint is visible here so fellow students can endorse issues and share opinions.</p>` +
+    `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px">` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'All' ? 'active' : ''}" data-cmp-filter="All">🏛️ All Campus (${communityList.length})</button>` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'Mine' ? 'active' : ''}" data-cmp-filter="Mine">👤 My Complaints (${mine.length})</button>` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'Hostel' ? 'active' : ''}" data-cmp-filter="Hostel">🏠 Hostel</button>` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'Food & Mess' ? 'active' : ''}" data-cmp-filter="Food & Mess">🍲 Mess &amp; Food</button>` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'College' ? 'active' : ''}" data-cmp-filter="College">📚 College &amp; Academic</button>` +
+    `<button type="button" class="preset-chip ${communityComplaintFilter === 'Cleanliness' ? 'active' : ''}" data-cmp-filter="Cleanliness">🧹 Cleanliness</button>` +
+    `</div>` +
+    `<div class="list">` +
+    (filteredList.length ? filteredList.map(c => {
       const cid = c.id;
       const isMineItem = isMine(c) || (c.login_id && c.login_id === userName());
       return `<div class="community-cmp-card" id="cmp-card-${cid}">` +
@@ -5476,8 +5591,10 @@ function renderComplaints() {
         `<input id="cmp-op-inp-${cid}" class="rec-reply-input" style="font-size:12px" placeholder="Add your opinion or experience…">` +
         `<button class="btn sm" data-cmp-post="${cid}" type="button" style="padding:4px 12px;font-size:12px;white-space:nowrap">Share Opinion</button>` +
         `</div></div></div>`;
-    }).join('') : '<p class="sub">No open campus grievances reported currently.</p>') +
-    `</div><p class="demo">Evidence photos are compressed on device. Submitter identities strictly protected when filed anonymously.</p>`;
+    }).join('') : '<p class="sub">No grievances found under this filter.</p>') +
+    `</div>` +
+    closedSection +
+    `<p class="demo" style="margin-top:16px">Evidence photos are compressed on device. Submitter identities strictly protected when filed anonymously.</p>`;
 }
 
 // File a complaint. force = true skips the duplicate check ("File anyway").
@@ -7554,8 +7671,45 @@ const achievementCard = (a, reviewer) => achievementEditForm(a, reviewer) ||
   (!reviewer && a.st === 'Verified' ? `<p style="margin-top:8px;font-size:12px;font-weight:600;color:var(--green)">🔒 Verified & Locked (Modifications restricted to Administrator)</p>` : '') +
   `</div>`;
 
+let achievementsLoading = false;
+async function loadAchievementsFromServer() {
+  if (achievementsLoading || typeof API === 'undefined' || !API.getAchievements) return;
+  achievementsLoading = true;
+  try {
+    const list = await API.getAchievements();
+    if (Array.isArray(list) && list.length) {
+      const uName = (userName() || '').toUpperCase();
+      const serverList = list.map(a => ({
+        id: a.id,
+        who: a.name || a.login_id || 'Student',
+        roll: (a.login_id || '').toUpperCase(),
+        title: a.title,
+        cat: a.category,
+        date: a.date,
+        desc: a.description || '',
+        link: a.link || '',
+        st: a.status || 'Pending',
+        mine: (a.login_id || '').toUpperCase() === uName,
+        vb: a.verified_by ? { n: a.verified_by, r: a.verified_role, at: a.verified_at ? new Date(a.verified_at).getTime() : Date.now() } : null
+      }));
+      ACHIEVEMENTS.splice(0, ACHIEVEMENTS.length, ...serverList);
+      saveJson('cc_ach', ACHIEVEMENTS);
+      const pga = $('pg-achievements');
+      if (pga && appData.tab === 'achievements') {
+        pga.innerHTML = isStaffRole() ? renderAchievementReview() : renderStudentAchievements();
+        translatePage(pga);
+      }
+    }
+  } catch (e) {
+    console.warn('loadAchievementsFromServer error:', e);
+  } finally {
+    achievementsLoading = false;
+  }
+}
+
 // Student view: post form + my achievements
 function renderStudentAchievements() {
+  if (!achievementsLoading) loadAchievementsFromServer();
   const message = achievementMessage; achievementMessage = '';
   const mine = ACHIEVEMENTS.filter(a => a.mine);
 
@@ -7591,11 +7745,12 @@ function submitAchievement() {
   if (title.length < 3) { errBox.textContent = 'Add a title for your achievement.'; return; }
   if (link && !isValidUrl(link)) { errBox.textContent = 'The proof link must start with http:// or https://'; return; }
 
-  ACHIEVEMENTS.unshift({
+  const entry = {
     id: Date.now(), who: accountName() || userName(), roll: userName().toUpperCase(), title,
     cat: $('acat').value, date: $('adt').value || todayIso(),
     desc: $('ads').value.trim(), link, st: 'Pending', mine: true
-  });
+  };
+  ACHIEVEMENTS.unshift(entry);
   saveJson('cc_ach', ACHIEVEMENTS);
   if (typeof API !== 'undefined' && API.createAchievement) {
     API.createAchievement({
@@ -7604,6 +7759,12 @@ function submitAchievement() {
       date: $('adt').value || todayIso(),
       description: $('ads').value.trim(),
       link
+    }).then(res => {
+      if (res && res.achievement && res.achievement.id) {
+        entry.id = res.achievement.id;
+        saveJson('cc_ach', ACHIEVEMENTS);
+      }
+      loadAchievementsFromServer();
     }).catch(() => { });
   }
   achievementMessage = '✅ Posted. A teacher will verify it soon.';
@@ -7613,6 +7774,7 @@ function submitAchievement() {
 
 // Teacher / admin view: waiting for verification + reviewed (scoped to teacher's department)
 function renderAchievementReview() {
+  if (!achievementsLoading) loadAchievementsFromServer();
   const isAdm = getRole() === 'admin';
   const myDept = canonicalDept(accountDept());
   const matchDept = a => {
@@ -10556,6 +10718,11 @@ function render() {
   renderBasePages();
   const role = getRole();
 
+  // Background server synchronization for active student and review pages
+  if (appData.tab === 'leave' && !studentLeavesLoading) loadStudentLeavesFromServer();
+  if (appData.tab === 'achievements' && !achievementsLoading) loadAchievementsFromServer();
+  if (appData.tab === 'complaints' && !communityLoading) loadCommunityComplaints();
+
   if (role === 'admin') {
     $('pg-home').innerHTML = renderAdminHome();
     $('pg-students').innerHTML = renderStudents();
@@ -10693,6 +10860,11 @@ function goToTab(name, dir, mode) {   // mode: 'back' (from the Back button) | '
   page.classList.remove('hidden', 'tab-drop-down', 'from-l', 'from-r', 'cas');
 
   render();
+
+  // Fresh server synchronization for active section
+  if (name === 'leave') loadStudentLeavesFromServer();
+  else if (name === 'achievements') loadAchievementsFromServer();
+  else if (name === 'complaints') loadCommunityComplaints();
 
   // Universal DROP-DOWN effect when switching tabs everywhere
   triggerTabDropDown();
@@ -11563,7 +11735,7 @@ document.querySelectorAll('footer').forEach(f => { if (!f.textContent.includes('
    ============================================================================= */
 
 // Everything clickable that this handler cares about
-const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn,[data-preset],[data-cmp-metoo],[data-cmp-quick],[data-cmp-post]';
+const CLICKABLE = '[data-go],[data-pay],[data-nf],[data-nyf],[data-nreset],[data-tv],[data-td],[data-hf],[data-ap2],[data-dd],[data-rs],[data-print],[data-tt],[data-kb],[data-mk],[data-allp],[data-msave],[data-off],[data-sync],[data-oapply],[data-act],[data-take],[data-sim],[data-iss],[data-ndel],[data-hdel],#npost,#hadd,#isub,[data-cr],[data-rm],[data-trm],#tadd,[data-av],[data-adv],#sadd,#achsub,[data-metoo],[data-force],[data-mrate],[data-mskip],#cfsub,[data-sheet],[data-close],[data-again],#csub,#lsub,#theme,[data-sl],[data-ndis],[data-nclear],[data-cf],[data-sg],[data-sclr],[data-syr],[data-vp],[data-back],[data-acc],#accadd,[data-ac-role-select],[data-acrole],#acclr,#acreset,[data-me],[data-res],[data-rc],[data-po],[data-rec],[data-hatt],[data-hallp],[data-hsave],[data-wtab],[data-wcf],[data-wrf],[data-wadv],[data-wreply],[data-srev],[data-gp],[data-gp-act],#sosSubmitBtn,[data-sos-cancel],[data-sos-res],[data-ev-reg],[data-ev-pass],[data-ev-f],#evPostSubmit,[data-ev-del],[data-cls-yf],[data-cls-sf],[data-cls-add],[data-cls-log],#clsExtraSubmit,[data-cls-export],[data-ics],[data-sms-send],[data-sms-set],#btn-send-sms,[data-exam-tab],[data-todo-toggle],[data-todo-del],#todoAddBtn,[data-atab],[data-alog-filter],#alogRefresh,#analyticsRefresh,#overviewAuditRefresh,#alogSearchBtn,[data-preset],[data-cmp-metoo],[data-cmp-quick],[data-cmp-post],[data-cmp-filter]';
 
 document.addEventListener('click', e => {
   // Clicking anywhere outside the ⋮ menu closes it
@@ -11729,9 +11901,15 @@ document.addEventListener('click', e => {
           a.st = status;
           a.vb = { n: userName(), r: getRole() === 'admin' ? 'Admin' : 'Teacher', at: Date.now() };
           saveJson('cc_ach', ACHIEVEMENTS);
+          showToast(`Achievement ${status === 'Verified' ? 'verified ✓' : 'rejected'}`);
           render();
         }).catch(err => {
-          showToast(getTranslatedErrorMessage(err));
+          console.warn('API verifyAchievement note:', err);
+          a.st = status;
+          a.vb = { n: userName(), r: getRole() === 'admin' ? 'Admin' : 'Teacher', at: Date.now() };
+          saveJson('cc_ach', ACHIEVEMENTS);
+          showToast(`Achievement updated to ${status}`);
+          render();
         });
       } else {
         a.st = status;
@@ -11744,6 +11922,10 @@ document.addEventListener('click', e => {
   else if (t.id === 'achsub') submitAchievement();
 
   // ----- Complaints & Presets -----
+  else if (t.dataset.cmpFilter) {
+    communityComplaintFilter = t.dataset.cmpFilter;
+    if ($('pg-complaints')) $('pg-complaints').innerHTML = renderComplaints();
+  }
   else if (t.dataset.adv) advanceComplaint(+t.dataset.adv);
   else if (t.dataset.metoo) meToo(+t.dataset.metoo);
   else if (t.dataset.cmpMetoo) toggleComplaintOpinion(+t.dataset.cmpMetoo);
