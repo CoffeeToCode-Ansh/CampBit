@@ -838,6 +838,21 @@ def init_db(password_hasher_fn=None):
                 pass
             conn.commit()
 
+             
+            # Older Postgres databases may lack these columns; add them before indexes
+            for col_def in (
+                "email TEXT",
+                "dept TEXT",
+                "hostel TEXT",
+                "photo TEXT",
+                "phone TEXT",
+                "pw_version INTEGER NOT NULL DEFAULT 0",
+            ):
+                conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_def}")
+            conn.execute("ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS client_uuid TEXT")
+            conn.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS client_uuid TEXT")
+            conn.commit()
+        
             # Postgres indexes execution
             for statement in POSTGRES_INDEXES_DDL.strip().split(";"):
                 stmt = statement.strip()
